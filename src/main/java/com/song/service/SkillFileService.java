@@ -118,6 +118,14 @@ public class SkillFileService {
                     }
                     if (fullTranslation.length() > 0) fullTranslation.append('\n');
                     fullTranslation.append(result.getText());
+            String translated = recordManager.getCachedTranslation(cacheKey);
+            boolean fromCache = translated != null;
+            if (!fromCache) {
+                TranslationResult result = translationService.translate(sourceText, from, to);
+                if (!result.isSuccess()) {
+                    LOG.warn("翻译服务返回失败: {} - {}", filePath, result.getErrorMessage());
+                    recordManager.recordFailure(filePath);
+                    return result;
                 }
                 translated = fullTranslation.toString();
                 recordManager.putCachedTranslation(cacheKey, translated);
