@@ -47,7 +47,34 @@ public class YoudaoConfigPane extends GridPane {
         secretKeyField.setPromptText("有道智云应用密钥");
         domainBox.getItems().addAll("general", "computers", "medicine", "finance", "game");
         domainBox.setMaxWidth(Double.MAX_VALUE);
-        handleOptionBox.getItems().addAll("0", "3");
+        handleOptionBox.getItems().addAll(
+                "deepseek-flash",
+                "deepseek-v4.1-flash-expires-on-0910",
+                "deepseek-v4-flash",
+                "deepseek-v4-flash-vision-exp",
+                "deepseek-v4-pro",
+                "glm-5",
+                "glm-5.1",
+                "glm-5.2",
+                "glm-5.3",
+                "glm-5.3-flash",
+                "kimi-k2.5",
+                "kimi-k2.6",
+                "kimi-k2.7-code",
+                "kimi-k3",
+                "mimo-v2.5",
+                "mimo-v2.5-pro",
+                "minimax-m2.5",
+                "minimax-m2.7",
+                "minimax-m3",
+                "qwen3.5-plus",
+                "qwen3.6-plus",
+                "qwen3.7-flash",
+                "qwen3.7-max",
+                "qwen3.7-plus",
+                "qwen3.8-27b",
+                "qwen3.8-flash",
+                "qwen3.8-max");
         handleOptionBox.setMaxWidth(Double.MAX_VALUE);
         promptField.setPromptText("可选提示词，最多 1200 字符 / 400 单词");
 

@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -22,6 +23,7 @@ import java.util.UUID;
 
 /**
  * 有道大模型翻译 API。
+ * 官方 curl 示例使用 application/x-www-form-urlencoded。
  */
 public class YoudaoTranslationProvider implements TranslationProvider {
 
@@ -33,82 +35,106 @@ public class YoudaoTranslationProvider implements TranslationProvider {
 
     @Override
     public TranslationResult translate(String q, String from, String to, AppConfig config) {
+        String appKey = config.getAppId();
+        String secret = config.getSecretKey();
+        String selectedModel = config.getHandleOption();
+
         try {
-            String appKey = config.getAppId();
-            String secret = config.getSecretKey();
-            String salt = UUID.randomUUID().toString();
-            String curtime = String.valueOf(System.currentTimeMillis() / 1000L);
-            String sign = sha256Hex(appKey + signInput(q) + salt + curtime + secret);
-
-            StringBuilder form = new StringBuilder();
-            addParam(form, "appKey", appKey);
-            addParam(form, "salt", salt);
-            addParam(form, "signType", "v3");
-            addParam(form, "sign", sign);
-            addParam(form, "curtime", curtime);
-            addParam(form, "i", q);
-            addParam(form, "handleOption", config.getHandleOption());
-            if (!config.getPrompt().isEmpty()) addParam(form, "prompt", config.getPrompt());
-            addParam(form, "from", YoudaoLanguageMapper.map(from));
-            addParam(form, "to", YoudaoLanguageMapper.map(to));
-            addParam(form, "streamType", "full");
-
-            HttpURLConnection conn = (HttpURLConnection) new URL(API_URL).openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(60000);
-            conn.setRequestProperty("Accept", "*/*");
-            conn.setRequestProperty("Content-Type",
-                    "application/x-www-form-urlencoded; charset=UTF-8");
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(form.toString().getBytes(StandardCharsets.UTF_8));
-            }
-
-            int code = conn.getResponseCode();
-            if (code != 200) {
-                throw new IllegalStateException("HTTP " + code + " - " + API_URL);
-            }
-
-            String lastFull = null;
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    line = line.trim();
-                    if (line.isEmpty()) continue;
-                    if (line.startsWith("data:")) line = line.substring(5).trim();
-                    if ("[DONE]".equals(line)) break;
-                    JsonObject json;
-                    try {
-                        json = JsonParser.parseString(line).getAsJsonObject();
-                    } catch (Exception ignore) {
-                        continue;
-                    }
-                    if (json.has("successful") && !json.get("successful").getAsBoolean()) {
-                        String errCode = json.has("code") ? json.get("code").getAsString() : "?";
-                        throw new IllegalStateException(TranslationErrorMessages.youdao(errCode));
-                    }
-                    if (json.has("code") && !"0".equals(json.get("code").getAsString())) {
-                        throw new IllegalStateException(
-                                TranslationErrorMessages.youdao(json.get("code").getAsString()));
-                    }
-                    JsonObject data = json.has("data") && json.get("data").isJsonObject()
-                            ? json.getAsJsonObject("data") : null;
-                    if (data != null && data.has("transFull")) {
-                        lastFull = data.get("transFull").getAsString();
-                    }
+            return TranslationResult.success(request(
+                    appKey, secret, q, from, to, selectedModel));
+        } catch (HttpStatusException e) {
+            // 兼容接口只接受 0/3 的情况。
+            if (e.status == 400) {
+                try {
+                    LOG.warn("有道大模型 handleOption={} 被拒绝，回退使用 0", selectedModel);
+                    return TranslationResult.success(request(
+                            appKey, secret, q, from, to, "0"));
+                } catch (Exception retry) {
+                    LOG.error("有道大模型翻译请求失败", retry);
+                    return TranslationResult.failure(retry.getMessage());
                 }
             }
-            if (lastFull == null || lastFull.isEmpty()) {
-                throw new IllegalStateException("有道大模型翻译返回结果为空");
-            }
-            return TranslationResult.success(lastFull);
+            LOG.error("有道大模型翻译请求失败", e);
+            return TranslationResult.failure(e.getMessage());
         } catch (Exception e) {
             LOG.error("有道大模型翻译请求失败", e);
             return TranslationResult.failure(e.getMessage() == null
                     ? "有道大模型翻译请求失败" : e.getMessage());
         }
+    }
+
+    private String request(String appKey, String secret, String q,
+                           String from, String to, String handleOption) throws Exception {
+        String salt = UUID.randomUUID().toString();
+        String curtime = String.valueOf(System.currentTimeMillis() / 1000L);
+        String sign = sha256Hex(appKey + signInput(q) + salt + curtime + secret);
+
+        StringBuilder form = new StringBuilder();
+        addParam(form, "appKey", appKey);
+        addParam(form, "salt", salt);
+        addParam(form, "signType", "v3");
+        addParam(form, "sign", sign);
+        addParam(form, "curtime", curtime);
+        addParam(form, "i", q);
+        addParam(form, "handleOption", handleOption);
+        addParam(form, "from", YoudaoLanguageMapper.map(from));
+        addParam(form, "to", YoudaoLanguageMapper.map(to));
+        addParam(form, "streamType", "full");
+
+        HttpURLConnection conn = (HttpURLConnection) new URL(API_URL).openConnection();
+        conn.setRequestMethod("POST");
+        conn.setDoOutput(true);
+        conn.setConnectTimeout(8000);
+        conn.setReadTimeout(60000);
+        conn.setRequestProperty("Accept", "*/*");
+        conn.setRequestProperty("Content-Type",
+                "application/x-www-form-urlencoded; charset=UTF-8");
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(form.toString().getBytes(StandardCharsets.UTF_8));
+        }
+
+        int code = conn.getResponseCode();
+        if (code == 400) {
+            throw new HttpStatusException(400, readAll(conn.getErrorStream()));
+        }
+        if (code != 200) {
+            throw new HttpStatusException(code, readAll(conn.getErrorStream()));
+        }
+
+        String lastFull = null;
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+                if (line.startsWith("data:")) line = line.substring(5).trim();
+                if ("[DONE]".equals(line)) break;
+                JsonObject json;
+                try {
+                    json = JsonParser.parseString(line).getAsJsonObject();
+                } catch (Exception ignore) {
+                    continue;
+                }
+                if (json.has("successful") && !json.get("successful").getAsBoolean()) {
+                    String errCode = json.has("code") ? json.get("code").getAsString() : "?";
+                    throw new IllegalStateException(TranslationErrorMessages.youdao(errCode));
+                }
+                if (json.has("code") && !"0".equals(json.get("code").getAsString())) {
+                    throw new IllegalStateException(
+                            TranslationErrorMessages.youdao(json.get("code").getAsString()));
+                }
+                JsonObject data = json.has("data") && json.get("data").isJsonObject()
+                        ? json.getAsJsonObject("data") : null;
+                if (data != null && data.has("transFull")) {
+                    lastFull = data.get("transFull").getAsString();
+                }
+            }
+        }
+        if (lastFull == null || lastFull.isEmpty()) {
+            throw new IllegalStateException("有道大模型翻译返回结果为空");
+        }
+        return lastFull;
     }
 
     private static void addParam(StringBuilder form, String key, String value) {
@@ -135,6 +161,27 @@ public class YoudaoTranslationProvider implements TranslationProvider {
             }
         } catch (Exception e) {
             throw new IllegalStateException("SHA-256 计算失败", e);
+        }
+    }
+
+    private static String readAll(InputStream in) {
+        if (in == null) return "";
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = br.readLine()) != null) sb.append(line);
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static class HttpStatusException extends Exception {
+        final int status;
+        HttpStatusException(int status, String body) {
+            super("HTTP " + status + " - " + body);
+            this.status = status;
         }
     }
 }
