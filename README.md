@@ -1,7 +1,7 @@
 # EasyReadSkill
 EasyReadSkill 是一个基于 JavaFX 的 `skill.md` 翻译工具，用于扫描目录中的 `skill.md` 文件，提取其中的 `Description` 文本，调用多种翻译服务完成翻译，并将结果写回文件。
 
-项目当前支持翻译服务商: 百度翻译 有道智云
+项目当前支持服务商 百度翻译 有道智云,后续增加适配
 
 ---
 
@@ -23,8 +23,6 @@ EasyReadSkill 是一个基于 JavaFX 的 `skill.md` 翻译工具，用于扫描�
 
 ---
 
----
-
 ## 运行
 
 ### 方式一：完整依赖 Jar
@@ -32,7 +30,7 @@ EasyReadSkill 是一个基于 JavaFX 的 `skill.md` 翻译工具，用于扫描�
 下载：
 
 ```text
-EasyReadSkill.jar
+easyReadSkill-1.0.0.jar
 ```
 
 确保本机已安装：
@@ -44,7 +42,7 @@ Java 17+
 运行：
 
 ```powershell
-java -jar .\EasyReadSkill.jar
+java -jar easyReadSkill-1.0.0.jar
 ```
 
 ### 方式二：jpackage 打包版
@@ -146,4 +144,3 @@ C:\Users\你的用户名\.easyReadSkill\
  skin/                自动生成的皮肤 CSS
 ```
 
----
