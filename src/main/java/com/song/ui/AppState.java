@@ -3,12 +3,13 @@ package com.song.ui;
 import com.song.config.AppConfig;
 import com.song.config.ConfigManager;
 import com.song.model.*;
-
-import com.song.model.*;
+import com.song.skin.SkinManager;
+import com.song.skin.SkinType;
 import com.song.service.*;
 import javafx.beans.property.*;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.stage.Stage;
 
 import java.io.File;
 import java.io.IOException;
@@ -33,6 +34,55 @@ public class AppState {
         this.recordManager = new RecordManager();
         this.translationService = new TranslationService(config);
         this.fileService = new SkillFileService(recordManager, translationService);
+        restoreUiState();
+    }
+
+    private void restoreUiState() {
+        try {
+            filter.set(FilterType.valueOf(config.getLastFilter()));
+        } catch (Exception ignored) {
+            filter.set(FilterType.UNTRANSLATED);
+        }
+        try {
+            effect.set(EffectType.valueOf(config.getLastEffect()));
+        } catch (Exception ignored) {
+            effect.set(EffectType.OVERWRITE);
+        }
+        try {
+            SkinManager.getInstance().setSkinType(SkinType.valueOf(config.getSkinType()));
+        } catch (Exception ignored) {
+            SkinManager.getInstance().setSkinType(SkinType.LIGHT);
+        }
+
+        filter.addListener((obs, oldValue, newValue) -> {
+            if (newValue != null) {
+                config.setLastFilter(newValue.name());
+                saveConfig();
+            }
+        });
+        effect.addListener((obs, oldValue, newValue) -> {
+            if (newValue != null) {
+                config.setLastEffect(newValue.name());
+                saveConfig();
+            }
+        });
+        selectedFile.addListener((obs, oldValue, newValue) -> {
+            config.setLastSelectedPath(newValue == null ? "" : newValue.getFilePath());
+            saveConfig();
+        });
+    }
+
+    /** 保存窗口状态。 */
+    public void saveUiState(Stage stage) {
+        if (stage == null) return;
+        config.setWindowMaximized(stage.isMaximized());
+        if (!stage.isMaximized()) {
+            config.setWindowWidth(stage.getWidth());
+            config.setWindowHeight(stage.getHeight());
+            config.setWindowX(stage.getX());
+            config.setWindowY(stage.getY());
+        }
+        saveConfig();
     }
 
     public AppConfig getConfig() { return config; }
@@ -70,6 +120,7 @@ public class AppState {
             sf.setStatus(rec.getStatus() != null ? rec.getStatus() : TranslateStatus.UNTRANSLATED);
             allFiles.add(sf);
         }
+        restoreLastSelection();
         bumpVersion();
     }
 
@@ -111,7 +162,19 @@ public class AppState {
         }
 
         allFiles.addAll(found);
+        restoreLastSelection();
         bumpVersion();
     }
+    private void restoreLastSelection() {
+        String path = config.getLastSelectedPath();
+        if (path == null || path.isEmpty()) return;
+        for (SkillFile sf : allFiles) {
+            if (path.equals(sf.getFilePath())) {
+                selectedFile.set(sf);
+                return;
+            }
+        }
+    }
+
     public void saveConfig() { ConfigManager.save(config); }
 }

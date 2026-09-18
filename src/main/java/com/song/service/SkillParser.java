@@ -161,17 +161,62 @@ public class SkillParser {
         return new BlockResult(lines, lastNonBlankEnd);
     }
 
+    /**
+     * 处理 | 字面块。
+     * 很多 SKILL.md 的 description 只是排版换行，需要按标点重新拼接为句子。
+     */
+    private static String joinLiteralLines(List<String> lines) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i) == null ? "" : lines.get(i).stripTrailing();
+            if (line.trim().isEmpty()) {
+                if (sb.length() > 0 && sb.charAt(sb.length() - 1) != '\n') {
+                    sb.append('\n');
+                }
+                continue;
+            }
+
+            String trimmed = line.trim();
+            if (sb.length() > 0 && sb.charAt(sb.length() - 1) != '\n') {
+                sb.append(' ');
+            }
+            sb.append(trimmed);
+
+            String next = i + 1 < lines.size() ? lines.get(i + 1) : null;
+            if (shouldBreakLine(trimmed, next)) {
+                sb.append('\n');
+            }
+        }
+        return trimTrailingNewlines(sb.toString());
+    }
+
+    private static boolean shouldBreakLine(String line, String next) {
+        if (line == null || line.isEmpty()) return true;
+        // 句子结束标点后断行，避免把下一句拼到上一句。
+        if (line.matches(".*[.!?。！？;；:：][\"')\\]}]*$")) return true;
+        if (next == null) return false;
+        String n = next.trim();
+        // Markdown 列表、标题、代码块等保留换行。
+        return n.startsWith("- ") || n.startsWith("* ") || n.startsWith("#")
+                || n.startsWith("```") || n.startsWith("|");
+    }
+
+    private static String trimTrailingNewlines(String text) {
+        int end = text.length();
+        while (end > 0) {
+            char c = text.charAt(end - 1);
+            if (c == '\n' || c == '\r' || c == ' ' || c == '\t') end--;
+            else break;
+        }
+        return text.substring(0, end);
+    }
+
     /** 将块内容转换为最终字符串。literal 对应 |，否则对应 &gt; 的折行规则。 */
     private static String formatBlock(List<String> lines, boolean literal) {
         if (lines == null || lines.isEmpty()) return "";
 
         if (literal) {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < lines.size(); i++) {
-                if (i > 0) sb.append('\n');
-                sb.append(lines.get(i).stripTrailing());
-            }
-            return sb.toString().trim();
+            return joinLiteralLines(lines);
         }
 
         StringBuilder sb = new StringBuilder();

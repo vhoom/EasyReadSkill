@@ -86,7 +86,12 @@ public class YoudaoTextTranslationProvider implements TranslationProvider {
             if (translation == null || translation.isEmpty()) {
                 throw new IllegalStateException("有道文本翻译返回结果为空");
             }
-            return TranslationResult.success(translation.get(0).getAsString());
+            StringBuilder translated = new StringBuilder();
+            for (int i = 0; i < translation.size(); i++) {
+                if (translated.length() > 0) translated.append('\n');
+                translated.append(translation.get(i).getAsString());
+            }
+            return TranslationResult.success(translated.toString());
         } catch (Exception e) {
             LOG.error("有道文本翻译请求失败", e);
             return TranslationResult.failure(e.getMessage() == null

@@ -16,7 +16,10 @@ public class ConfigManager {
     private static final Path DATA_DIR =
             Paths.get(System.getProperty("user.home"), ".easyReadSkill");
     private static final Path CONFIG_FILE = DATA_DIR.resolve("config.json");
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Gson GSON = new GsonBuilder()
+            .setPrettyPrinting()
+            .serializeSpecialFloatingPointValues()
+            .create();
 
     public static Path getDataDir() { return DATA_DIR; }
     public static Path getConfigFile() { return CONFIG_FILE; }

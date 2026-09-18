@@ -92,24 +92,26 @@ public class RightPanel extends VBox {
             effectBox.getChildren().add(rb);
         }
 
+        AnimatedButton retranslate = new AnimatedButton("重新翻译");
         AnimatedButton transCur = new AnimatedButton("翻译当前文件");
         AnimatedButton transSel = new AnimatedButton("翻译勾选文件");
         AnimatedButton restore = new AnimatedButton("还原成备份");
         AnimatedButton rebackup = new AnimatedButton("重新备份");
         stopButton.setDisable(true);
 
+        retranslate.setOnAction(e -> retranslateCurrent());
         transCur.setOnAction(e -> translateCurrent());
         transSel.setOnAction(e -> translateSelected());
         restore.setOnAction(e -> restoreCurrent());
         rebackup.setOnAction(e -> rebackupCurrent());
         stopButton.setOnAction(e -> stopFlag = true);
 
-        for (Button b : List.of(transCur, transSel, restore, rebackup, stopButton)) {
+        for (Button b : List.of(retranslate, transCur, transSel, restore, rebackup, stopButton)) {
             b.setMinWidth(110);
             b.setPrefWidth(120);
         }
 
-        HBox btnBox = new HBox(8, transCur, transSel, stopButton, restore, rebackup);
+        HBox btnBox = new HBox(8, retranslate, transCur, transSel, stopButton, restore, rebackup);
         btnBox.setAlignment(Pos.CENTER_LEFT);
 
         progressBar.setPrefWidth(220);
@@ -203,6 +205,20 @@ public class RightPanel extends VBox {
         return List.of(current);
     }
 
+    private void retranslateCurrent() {
+        List<SkillFile> targets = getActionTargets();
+        if (targets.isEmpty()) {
+            UiHelper.warn("提示", "请先勾选文件或在左侧选择一个文件。");
+            return;
+        }
+        if (!UiHelper.confirm("确认",
+                "重新翻译会忽略翻译记忆缓存，强制请求翻译 API。\n"
+                        + "共 " + targets.size() + " 个文件，是否继续？")) {
+            return;
+        }
+        startTranslate(targets, false);
+    }
+
     private void translateCurrent() {
         SkillFile sf = state.getSelectedFile();
         if (sf == null) {
@@ -214,7 +230,7 @@ public class RightPanel extends VBox {
         }
         List<SkillFile> targets = new ArrayList<>();
         targets.add(sf);
-        startTranslate(targets);
+        startTranslate(targets, true);
     }
 
     private void translateSelected() {
@@ -231,10 +247,34 @@ public class RightPanel extends VBox {
                 return;
             }
         }
-        startTranslate(selected);
+        startTranslate(selected, true);
     }
 
-    private void startTranslate(List<SkillFile> targets) {
+    /**
+     * 根据 CPU、内存和任务数量动态计算线程数。
+     * 任务很少时不会创建多余线程，机器配置较低时自动降低并发。
+     */
+    private int calculateThreadCount(int taskCount) {
+        if (taskCount <= 0) return 0;
+
+        int cores = Runtime.getRuntime().availableProcessors();
+        long maxMemoryMb = Runtime.getRuntime().maxMemory() / (1024 * 1024);
+
+        int cpuBased = Math.max(1, cores);
+        int memoryBased;
+        if (maxMemoryMb < 512) {
+            memoryBased = 2;
+        } else if (maxMemoryMb < 1024) {
+            memoryBased = 4;
+        } else {
+            memoryBased = 8;
+        }
+
+        int machineLimit = Math.max(1, Math.min(8, Math.min(cpuBased, memoryBased)));
+        return Math.min(taskCount, machineLimit);
+    }
+
+    private void startTranslate(List<SkillFile> targets, boolean useCache) {
         if (worker != null && worker.isAlive()) {
             UiHelper.warn("提示", "已有翻译任务正在运行。");
             return;
@@ -246,7 +286,7 @@ public class RightPanel extends VBox {
         String to = state.getConfig().getTargetLang();
         int interval = state.getConfig().getRequestIntervalMs();
         int total = targets.size();
-        int threadCount = Math.max(2, Math.min(8, Runtime.getRuntime().availableProcessors()));
+        int threadCount = calculateThreadCount(total);
 
         progressBar.setProgress(0);
         progressLabel.setText("0/" + total);
@@ -270,13 +310,11 @@ public class RightPanel extends VBox {
                         if (stopFlag) return;
                         log(String.format("[%d/%d] %s", idx, total, sf.getParentName()));
 
-                        if (interval > 0) {
-                            Thread.sleep(interval);
-                        }
+
                         if (stopFlag) return;
 
                         TranslationResult result = state.getFileService()
-                                .translateFile(sf.getFilePath(), effect, from, to);
+                                .translateFile(sf.getFilePath(), effect, from, to, useCache);
 
                         if (result.isSuccess()) {
                             ok.incrementAndGet();
@@ -292,8 +330,6 @@ public class RightPanel extends VBox {
                             errors.add(sf.getParentName() + "：" + error);
                             log("    失败：" + error);
                         }
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
                     } catch (Exception e) {
                         fail.incrementAndGet();
                         errors.add(sf.getParentName() + "：" + e.getMessage());

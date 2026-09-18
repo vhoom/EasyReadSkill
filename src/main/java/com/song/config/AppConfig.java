@@ -20,6 +20,17 @@ public class AppConfig {
     private String sourceLang = "en";
     private int requestIntervalMs = 500;
 
+    // 上次退出时的界面状态
+    private String lastSelectedPath = "";
+    private String lastFilter = "UNTRANSLATED";
+    private String lastEffect = "OVERWRITE";
+    private String skinType = "LIGHT";
+    private double windowWidth = 1200;
+    private double windowHeight = 780;
+    private double windowX = -1;
+    private double windowY = -1;
+    private boolean windowMaximized = false;
+
     // 旧版扁平配置字段，仅用于迁移，不再主动使用
     private String appId;
     private String apiKey;
@@ -154,6 +165,33 @@ public class AppConfig {
     public void setPrompt(String prompt) {
         getYoudaoConfig().setPrompt(prompt);
     }
+
+    public String getLastSelectedPath() { return lastSelectedPath; }
+    public void setLastSelectedPath(String lastSelectedPath) { this.lastSelectedPath = lastSelectedPath; }
+
+    public String getLastFilter() { return lastFilter; }
+    public void setLastFilter(String lastFilter) { this.lastFilter = lastFilter; }
+
+    public String getLastEffect() { return lastEffect; }
+    public void setLastEffect(String lastEffect) { this.lastEffect = lastEffect; }
+
+    public String getSkinType() { return skinType; }
+    public void setSkinType(String skinType) { this.skinType = skinType; }
+
+    public double getWindowWidth() { return windowWidth; }
+    public void setWindowWidth(double windowWidth) { this.windowWidth = windowWidth; }
+
+    public double getWindowHeight() { return windowHeight; }
+    public void setWindowHeight(double windowHeight) { this.windowHeight = windowHeight; }
+
+    public double getWindowX() { return windowX; }
+    public void setWindowX(double windowX) { this.windowX = windowX; }
+
+    public double getWindowY() { return windowY; }
+    public void setWindowY(double windowY) { this.windowY = windowY; }
+
+    public boolean isWindowMaximized() { return windowMaximized; }
+    public void setWindowMaximized(boolean windowMaximized) { this.windowMaximized = windowMaximized; }
 
     /** 将旧版 config.json 中的扁平字段迁移到各自 provider 配置。 */
     public void migrateLegacy() {
