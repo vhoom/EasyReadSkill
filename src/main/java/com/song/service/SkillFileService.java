@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.List;
 
 public class SkillFileService {
 
@@ -70,6 +71,11 @@ public class SkillFileService {
      */
     public TranslationResult translateFile(String filePath, EffectType effect,
                                            String from, String to) {
+        return translateFile(filePath, effect, from, to, true);
+    }
+
+    public TranslationResult translateFile(String filePath, EffectType effect,
+                                           String from, String to, boolean useCache) {
         try {
             ensureBackup(filePath);
 
@@ -88,6 +94,30 @@ public class SkillFileService {
                     ? backupOriginal : original;
 
             String cacheKey = buildCacheKey(sourceText, from, to);
+            String translated = useCache ? recordManager.getCachedTranslation(cacheKey) : null;
+            boolean fromCache = translated != null;
+            if (!fromCache) {
+                List<String> chunks = sourceText.length() <= 1800
+                        ? List.of(sourceText)
+                        : TextSegmenter.split(sourceText, 1800);
+
+                StringBuilder fullTranslation = new StringBuilder();
+                int interval = translationService.getRequestIntervalMs();
+                for (int i = 0; i < chunks.size(); i++) {
+                    String chunk = chunks.get(i);
+                    if (chunk.isEmpty()) {
+                        if (fullTranslation.length() > 0) fullTranslation.append('\n');
+                        continue;
+                    }
+
+                    TranslationResult result = translationService.translate(chunk, from, to);
+                    if (!result.isSuccess()) {
+                        LOG.warn("翻译服务返回失败: {} - {}", filePath, result.getErrorMessage());
+                        recordManager.recordFailure(filePath);
+                        return result;
+                    }
+                    if (fullTranslation.length() > 0) fullTranslation.append('\n');
+                    fullTranslation.append(result.getText());
             String translated = recordManager.getCachedTranslation(cacheKey);
             boolean fromCache = translated != null;
             if (!fromCache) {
@@ -97,9 +127,18 @@ public class SkillFileService {
                     recordManager.recordFailure(filePath);
                     return result;
                 }
-                translated = result.getText();
+                translated = fullTranslation.toString();
                 recordManager.putCachedTranslation(cacheKey, translated);
+                LOG.info("翻译缓存已更新: {}", filePath);
             }
+
+            LOG.info("翻译内容 [{}]{}" + System.lineSeparator()
+                            + "原文：{}" + System.lineSeparator()
+                            + "译文：{}",
+                    filePath,
+                    fromCache ? "（命中缓存）" : "",
+                    sourceText,
+                    translated);
 
             String newDesc = (effect == EffectType.OVERWRITE)
                     ? translated

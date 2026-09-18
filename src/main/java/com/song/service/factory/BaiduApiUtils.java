@@ -79,11 +79,19 @@ final class BaiduApiUtils {
         if (results == null || results.isEmpty()) {
             throw new IOException("百度翻译返回结果为空");
         }
-        JsonObject first = results.get(0).getAsJsonObject();
-        if (!first.has("dst")) {
+
+        // 百度会把长文本按句子/行拆成多个 trans_result，需要全部拼接。
+        StringBuilder translated = new StringBuilder();
+        for (int i = 0; i < results.size(); i++) {
+            JsonObject item = results.get(i).getAsJsonObject();
+            if (!item.has("dst")) continue;
+            if (translated.length() > 0) translated.append('\n');
+            translated.append(item.get("dst").getAsString());
+        }
+        if (translated.length() == 0) {
             throw new IOException("百度翻译返回结果缺少 dst 字段");
         }
-        return first.get("dst").getAsString();
+        return translated.toString();
     }
 
     private static HttpURLConnection open(String apiUrl) throws IOException {
