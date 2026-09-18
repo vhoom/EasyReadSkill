@@ -147,27 +147,3 @@ C:\Users\你的用户名\.easyReadSkill\
 ```
 
 ---
-
-## 项目结构
-
-```text
-src/main/java/com/song/easyreadskill/
- App.java / Launcher.java
- config/          配置模型与读写
- model/           数据模型
- service/         扫描、解析、翻译、记录、翻译记忆
-    factory/     多服务商翻译实现
- skin/            主题、设计令牌、CSS 生成
-    animation/   动画配置与工具
-    control/     带动画的 UI 控件
-    windows/     Windows 原生标题栏适配
- ui/              主界面与弹窗
-    config/      按提供商拆分的配置面板
- util/            工具类
-```
-
----
-
-## 许可
-
-请根据你的实际发布需求补充 License。
