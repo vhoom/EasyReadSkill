@@ -82,11 +82,16 @@ public class SkillFileService {
                 return TranslationResult.failure(error);
             }
 
-            String cacheKey = buildCacheKey(original, from, to);
+            // 翻译+原文以及重复翻译时，都以首次备份的原文作为源文本。
+            String backupOriginal = recordManager.getOriginalDescription(filePath);
+            String sourceText = (backupOriginal != null && !backupOriginal.isEmpty())
+                    ? backupOriginal : original;
+
+            String cacheKey = buildCacheKey(sourceText, from, to);
             String translated = recordManager.getCachedTranslation(cacheKey);
             boolean fromCache = translated != null;
             if (!fromCache) {
-                TranslationResult result = translationService.translate(original, from, to);
+                TranslationResult result = translationService.translate(sourceText, from, to);
                 if (!result.isSuccess()) {
                     LOG.warn("翻译服务返回失败: {} - {}", filePath, result.getErrorMessage());
                     recordManager.recordFailure(filePath);
@@ -98,7 +103,7 @@ public class SkillFileService {
 
             String newDesc = (effect == EffectType.OVERWRITE)
                     ? translated
-                    : translated + "/" + original;
+                    : translated + "/" + sourceText;
 
             String newContent = SkillParser.replaceDescription(content, newDesc);
             writeFile(filePath, newContent);
