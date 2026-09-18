@@ -30,7 +30,7 @@ EasyReadSkill 是一个基于 JavaFX 的 `skill.md` 翻译工具，用于扫描�
 下载：
 
 ```text
-easyReadSkill-1.0.0.jar
+EasyReadSkill.jar
 ```
 
 确保本机已安装：
@@ -42,10 +42,10 @@ Java 17+
 运行：
 
 ```powershell
-java -jar easyReadSkill-1.0.0.jar
+java -jar EasyReadSkill.jar
 ```
 
-### 方式二：jpackage 打包版
+### 方式二： 运行exe
 
 下载：
 
@@ -58,12 +58,6 @@ EasyReadSkill-windows-x64.zip
 ```text
 EasyReadSkill.exe
 ```
-### 从源码构建
- 环境要求
-- JDK 17
-- Maven Wrapper 或 Maven 3.8+
-- Windows / macOS / Linux
-
 ---
 
 ## 快速使用
