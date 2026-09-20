@@ -22,32 +22,15 @@ EasyReadSkill 是一个基于 JavaFX 的 `skill.md` 翻译工具，用于扫描�
 - 日志输出到 `~/.easyReadSkill/logs`
 
 ---
-
 ## 运行
 
-### 方式一：完整依赖 Jar
+### 方式一：运行 exe（推荐，无需安装 Java）
 
-下载：
+前往 Releases 页面下载最新的 Windows 压缩包：
 
-```text
-EasyReadSkill.jar
-```
+[**→ 点击前往 Releases 下载最新版本**](https://github.com/vhoom/EasyReadSkill/releases/latest)
 
-确保本机已安装：
-
-```text
-Java 17+
-```
-
-运行：
-
-```powershell
-java -jar EasyReadSkill.jar
-```
-
-### 方式二： 运行exe
-
-下载：
+下载文件：
 
 ```text
 EasyReadSkill-windows-x64.zip
@@ -58,8 +41,23 @@ EasyReadSkill-windows-x64.zip
 ```text
 EasyReadSkill.exe
 ```
----
 
+程序自带精简运行时，无需本机安装 Java。
+
+### 方式二：运行完整依赖 Jar
+
+[**前往 Releases 页面下载**](https://github.com/vhoom/EasyReadSkill/releases/latest)：
+
+```text
+EasyReadSkill.jar
+```
+
+确保本机已安装 **Java 17+**，然后在 Jar 所在目录打开终端运行：
+
+```powershell
+java -jar EasyReadSkill.jar
+```
+---
 ## 快速使用
 
 ### 1. 配置 API
