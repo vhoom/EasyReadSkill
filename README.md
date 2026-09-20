@@ -1,0 +1,2 @@
+# EasyReadSkill
+如果在一堆skill列表中因英文描述看不懂,记不住而头疼,那么就可以试试EasyReadSkill,一款可以把description翻译成中文的程序
