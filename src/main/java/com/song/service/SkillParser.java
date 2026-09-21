@@ -23,17 +23,20 @@ import java.util.regex.Pattern;
  */
 public class SkillParser {
 
-    /** 匹配 description/Description 键，允许大小写和行首缩进。 */
+    /**
+     * 只匹配 frontmatter 顶格的 description/Description。
+     * 缩进键是别的字段的子节点，不能当成 skill 的 description。
+     */
     private static final Pattern DESC_LINE_PATTERN =
-            Pattern.compile("(?i)^([ \\t]*description[ \\t]*:[ \\t]*)(.*)$");
+            Pattern.compile("(?i)^(description[ \\t]*:[ \\t]*)(.*)$");
 
-    /** 提取第一处 Description 的内容；找不到返回 null。 */
+    /** 提取 frontmatter 中第一处 Description 的内容；找不到返回 null。 */
     public static String extractDescription(String content) {
         DescriptionMatch match = findDescription(content);
         return match != null ? match.value : null;
     }
 
-    /** 把第一处 Description 的内容替换为 newDesc，其余部分原样保留。 */
+    /** 把 frontmatter 中第一处 Description 的内容替换为 newDesc，其余部分原样保留。 */
     public static String replaceDescription(String content, String newDesc) {
         DescriptionMatch match = findDescription(content);
         if (match == null) return content;
@@ -53,14 +56,18 @@ public class SkillParser {
         // Skip UTF-8 BOM if present; keep it in the untouched prefix.
         if (content.charAt(0) == '\uFEFF') pos = 1;
 
-        while (pos < content.length()) {
+        int[] fm = frontMatterBounds(content, pos);
+        if (fm == null) return null;
+        int limit = fm[1];
+
+        while (pos < limit) {
             LineRef line = lineAt(content, pos);
-            if (line == null) break;
+            if (line == null || line.start >= limit) break;
 
             Matcher matcher = DESC_LINE_PATTERN.matcher(line.text);
             if (matcher.matches()) {
                 String prefix = matcher.group(1);
-                String inline = matcher.group(2).trim();
+                String inline = stripInlineComment(matcher.group(2)).trim();
                 int keyIndent = leadingWhitespace(line.text);
 
                 String value;
@@ -91,12 +98,39 @@ public class SkillParser {
                     }
                 }
 
+                if (end > limit) end = limit;
                 return new DescriptionMatch(line.start, end, prefix, value);
             }
 
             pos = line.endWith;
         }
         return null;
+    }
+
+    /**
+     * YAML frontmatter：BOM 后第一行必须是 ---，到下一行 --- 或 ... 为止。
+     * 正文里的 description 不算。未闭合则视为没有 frontmatter。
+     */
+    private static int[] frontMatterBounds(String content, int from) {
+        LineRef first = lineAt(content, from);
+        if (first == null || !isFrontMatterFence(first.text)) return null;
+
+        int pos = first.endWith;
+        while (pos < content.length()) {
+            LineRef line = lineAt(content, pos);
+            if (line == null) break;
+            if (isFrontMatterFence(line.text)) {
+                return new int[]{first.endWith, line.start};
+            }
+            pos = line.endWith;
+        }
+        return null;
+    }
+
+    private static boolean isFrontMatterFence(String line) {
+        if (line == null) return false;
+        String trimmed = line.trim();
+        return "---".equals(trimmed) || "...".equals(trimmed);
     }
 
     /** 判断 YAML 块标量标记：&gt;、&gt;-、&gt;+、|、|-、|+，也兼容缩进数字。 */
@@ -250,7 +284,33 @@ public class SkillParser {
             return sb.toString();
         }
 
-        return prefix + value;
+        return prefix + yamlInlineScalar(normalized);
+    }
+
+    static String yamlInlineScalar(String value) {
+        if (yamlNeedsQuotes(value)) {
+            return '"' + value.replace("\\", "\\\\").replace("\"", "\\\"") + '"';
+        }
+        return value;
+    }
+
+    static boolean yamlNeedsQuotes(String s) {
+        if (s.isEmpty()) return true;
+        char first = s.charAt(0);
+        char last = s.charAt(s.length() - 1);
+        if (first == ' ' || first == '\t' || last == ' ' || last == '\t') return true;
+        if ("-?:{}[]&*!|>'\"%@`,".indexOf(first) >= 0) return true;
+        if (s.equalsIgnoreCase("true") || s.equalsIgnoreCase("false")
+                || s.equalsIgnoreCase("null") || s.equalsIgnoreCase("yes")
+                || s.equalsIgnoreCase("no") || s.equalsIgnoreCase("on")
+                || s.equalsIgnoreCase("off")) {
+            return true;
+        }
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c < 0x20 || c == ':' || c == '#' || c == '"' || c == '\'') return true;
+        }
+        return false;
     }
 
     /** 返回字符串开头的空白缩进。 */
@@ -276,6 +336,43 @@ public class SkillParser {
         return text.substring(i);
     }
 
+    /**
+     * 去掉行内 YAML 注释。引号里的 # 保留。
+     * {@code #} 只有在空白之后（或行首）才是注释。
+     */
+    static String stripInlineComment(String raw) {
+        if (raw == null || raw.isEmpty()) return "";
+        boolean single = false;
+        boolean dbl = false;
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (dbl) {
+                if (c == '\\' && i + 1 < raw.length()) {
+                    i++;
+                    continue;
+                }
+                if (c == '"') dbl = false;
+                continue;
+            }
+            if (single) {
+                if (c == '\'' && i + 1 < raw.length() && raw.charAt(i + 1) == '\'') {
+                    i++;
+                    continue;
+                }
+                if (c == '\'') single = false;
+                continue;
+            }
+            if (c == '"') {
+                dbl = true;
+            } else if (c == '\'') {
+                single = true;
+            } else if (c == '#' && (i == 0 || raw.charAt(i - 1) == ' ' || raw.charAt(i - 1) == '\t')) {
+                return raw.substring(0, i);
+            }
+        }
+        return raw;
+    }
+
     /** 去除 YAML 单行字符串两端的引号，并处理常见转义。 */
     private static String unquote(String s) {
         if (s.length() >= 2) {
@@ -284,14 +381,30 @@ public class SkillParser {
             if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
                 String inner = s.substring(1, s.length() - 1);
                 if (first == '"') {
-                    inner = inner.replace("\\\"", "\"").replace("\\\\", "\\");
-                } else {
-                    inner = inner.replace("''", "'");
+                    return unescapeDoubleQuoted(inner);
                 }
-                return inner;
+                return inner.replace("''", "'");
             }
         }
         return s;
+    }
+
+    /** 从左到右处理 {@code \\} 和 {@code \"}，避免先替换引号把反斜杠吃掉。 */
+    private static String unescapeDoubleQuoted(String inner) {
+        StringBuilder sb = new StringBuilder(inner.length());
+        for (int i = 0; i < inner.length(); i++) {
+            char c = inner.charAt(i);
+            if (c == '\\' && i + 1 < inner.length()) {
+                char next = inner.charAt(i + 1);
+                if (next == '\\' || next == '"') {
+                    sb.append(next);
+                    i++;
+                    continue;
+                }
+            }
+            sb.append(c);
+        }
+        return sb.toString();
     }
 
     private static LineRef lineAt(String content, int pos) {

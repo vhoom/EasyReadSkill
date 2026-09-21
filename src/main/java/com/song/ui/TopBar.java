@@ -5,82 +5,102 @@ import com.song.model.SkillFile;
 import com.song.model.TranslateStatus;
 import com.song.skin.SkinManager;
 import com.song.skin.SkinType;
-import com.song.skin.control.AnimatedButton;
-import com.song.skin.control.AnimatedComboBox;
 import com.song.util.LanguageUtils;
 import com.song.util.UiHelper;
 
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.VPos;
 import javafx.scene.control.*;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.util.StringConverter;
 
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 public class TopBar extends VBox {
     private final AppState state;
 
     public TopBar(AppState state) {
         this.state = state;
-        setPadding(new Insets(8));
-        setSpacing(8);
+        setPadding(new Insets(12, 16, 12, 16));
         getStyleClass().add("top-bar");
 
-        AnimatedButton pathBtn = new AnimatedButton("扫描路径管理");
+        Button pathBtn = new Button("扫描路径");
         pathBtn.setOnAction(e -> new ScanPathDialog(state).showAndWait());
 
-        AnimatedButton reloadBtn = new AnimatedButton("扫描文件");
+        Button reloadBtn = new Button("扫描文件");
         reloadBtn.setOnAction(e -> {
-            state.reload();
-            UiHelper.info("完成", "共扫描到 " + state.getAllFiles().size() + " 个 skill.md 文件。");
+            reloadBtn.setDisable(true);
+            Thread scan = new Thread(() -> {
+                try {
+                    var found = state.scanFiles();
+                    Platform.runLater(() -> {
+                        state.applyScannedFiles(found);
+                        reloadBtn.setDisable(false);
+                        UiHelper.info("完成", "共扫描到 " + found.size() + " 个 SKILL.md 文件。");
+                    });
+                } catch (Exception ex) {
+                    Platform.runLater(() -> {
+                        reloadBtn.setDisable(false);
+                        UiHelper.error("扫描失败", ex.getMessage() == null ? "未知错误" : ex.getMessage());
+                    });
+                }
+            }, "scan-skills");
+            scan.setDaemon(true);
+            scan.start();
         });
 
-        Label skinLabel = new Label("皮肤：");
-        AnimatedComboBox<SkinType> skinBox = new AnimatedComboBox<>();
+        Label skinLabel = new Label("外观");
+        skinLabel.getStyleClass().add("secondary");
+        ComboBox<SkinType> skinBox = new ComboBox<>();
         skinBox.getItems().setAll(SkinType.values());
         skinBox.setValue(SkinManager.getInstance().getCurrentType());
         skinBox.valueProperty().addListener((obs, o, n) -> {
             if (n != null) {
                 SkinManager.getInstance().setSkinType(n);
-                // 确保 Scene 已存在时立即重新应用样式
+                state.getConfig().setSkinType(n.name());
+                state.saveConfig();
                 if (getScene() != null) {
                     SkinManager.getInstance().applyTo(getScene());
                 }
             }
         });
 
-
-
-        Label apiLabel = new Label("API：" + apiText());
-        AnimatedButton apiBtn = new AnimatedButton("API 配置");
+        Label apiLabel = new Label(apiText());
+        apiLabel.getStyleClass().add("secondary");
+        Button apiBtn = new Button("API 配置");
+        ComboBox<String> sourceBox = langBox(state.getConfig().getSourceLang(), code -> {
+            state.getConfig().setSourceLang(code);
+            state.saveConfig();
+        }, "auto", "en", "zh", "jp", "kor", "fra", "de", "spa", "ru", "pt", "it");
+        ComboBox<String> targetBox = langBox(state.getConfig().getTargetLang(), code -> {
+            state.getConfig().setTargetLang(code);
+            state.saveConfig();
+        }, "zh", "en", "jp", "kor", "fra", "de", "spa", "ru");
         apiBtn.setOnAction(e -> {
             new ApiConfigDialog(state).showAndWait();
-            apiLabel.setText("API：" + apiText());
+            apiLabel.setText(apiText());
+            sourceBox.setValue(state.getConfig().getSourceLang());
         });
 
-        Region actionSpacer = new Region();
-        HBox.setHgrow(actionSpacer, Priority.ALWAYS);
-        HBox actionRow = new HBox(10,
-                pathBtn, reloadBtn, actionSpacer,
-                skinLabel, skinBox, apiLabel, apiBtn);
-        actionRow.setAlignment(Pos.CENTER_LEFT);
-
-        Label filterLabel = new Label("筛选：");
-        ToggleGroup filterGroup = new ToggleGroup();
-        HBox filterBox = new HBox(6);
+        HBox filterBox = new HBox(12);
         Map<FilterType, RadioButton> filterButtons = new EnumMap<>(FilterType.class);
+        ToggleGroup filterGroup = new ToggleGroup();
         for (FilterType ft : FilterType.values()) {
             RadioButton rb = new RadioButton(ft.getLabel());
+            rb.getStyleClass().add("filter-tab");
             rb.setToggleGroup(filterGroup);
             rb.setUserData(ft);
-            if (ft == state.getFilter()) rb.setSelected(true);
+            if (ft == state.getFilter())
+                rb.setSelected(true);
             rb.selectedProperty().addListener((obs, o, n) -> {
-                if (n) state.filterProperty().set(ft);
+                if (n)
+                    state.filterProperty().set(ft);
             });
             filterButtons.put(ft, rb);
             filterBox.getChildren().add(rb);
@@ -88,11 +108,39 @@ public class TopBar extends VBox {
         state.versionProperty().addListener((obs, o, n) -> updateFilterCounts(filterButtons));
         updateFilterCounts(filterButtons);
 
-        Label langLabel = new Label("目标语言：");
-        AnimatedComboBox<String> langBox = new AnimatedComboBox<>();
-        langBox.getItems().addAll("zh", "en", "jp", "kor", "fra", "de", "spa", "ru");
-        langBox.setValue(state.getConfig().getTargetLang());
-        langBox.setConverter(new StringConverter<>() {
+        Label langLabel = new Label("目标");
+        langLabel.getStyleClass().add("secondary");
+        Label sourceLabel = new Label("源语言");
+        sourceLabel.getStyleClass().add("secondary");
+
+        // 逻辑分组各自成一个 HBox，放进 FlowPane；窗口变窄时自动换到下一行。
+        HBox scans = new HBox(16, pathBtn, reloadBtn);
+        scans.setAlignment(Pos.CENTER_LEFT);
+        filterBox.setAlignment(Pos.CENTER_LEFT);
+
+        HBox skinGroup = new HBox(8, skinLabel, skinBox);
+        skinGroup.setAlignment(Pos.CENTER_LEFT);
+        HBox apiGroup = new HBox(8, apiLabel, apiBtn);
+        apiGroup.setAlignment(Pos.CENTER_LEFT);
+        HBox sourceGroup = new HBox(8, sourceLabel, sourceBox);
+        sourceGroup.setAlignment(Pos.CENTER_LEFT);
+        HBox targetGroup = new HBox(8, langLabel, targetBox);
+        targetGroup.setAlignment(Pos.CENTER_LEFT);
+
+        FlowPane flow = new FlowPane(scans, filterBox, skinGroup, apiGroup, sourceGroup, targetGroup);
+        flow.setHgap(16);
+        flow.setVgap(12);
+        flow.setAlignment(Pos.CENTER_LEFT);
+        flow.setRowValignment(VPos.CENTER);
+
+        getChildren().add(flow);
+    }
+
+    private ComboBox<String> langBox(String current, Consumer<String> save, String... codes) {
+        ComboBox<String> box = new ComboBox<>();
+        box.getItems().addAll(codes);
+        box.setValue(current);
+        box.setConverter(new StringConverter<>() {
             @Override
             public String toString(String code) {
                 return LanguageUtils.displayName(code);
@@ -103,19 +151,11 @@ public class TopBar extends VBox {
                 return label;
             }
         });
-        langBox.valueProperty().addListener((obs, o, n) -> {
-            if (n != null) {
-                state.getConfig().setTargetLang(n);
-                state.saveConfig();
-            }
+        box.valueProperty().addListener((obs, o, n) -> {
+            if (n != null)
+                save.accept(n);
         });
-
-        Region filterSpacer = new Region();
-        HBox.setHgrow(filterSpacer, Priority.ALWAYS);
-        HBox filterRow = new HBox(10, filterLabel, filterBox, filterSpacer, langLabel, langBox);
-        filterRow.setAlignment(Pos.CENTER_LEFT);
-
-        getChildren().addAll(actionRow, filterRow);
+        return box;
     }
 
     private String apiText() {
@@ -130,7 +170,8 @@ public class TopBar extends VBox {
 
         for (SkillFile sf : state.getAllFiles()) {
             TranslateStatus status = sf.getStatus();
-            if (status == null) continue;
+            if (status == null)
+                continue;
             switch (status) {
                 case UNTRANSLATED -> untranslated++;
                 case TRANSLATED -> translated++;
@@ -145,7 +186,7 @@ public class TopBar extends VBox {
     }
 
     private void setFilterCount(Map<FilterType, RadioButton> buttons,
-                                FilterType type, int count) {
+            FilterType type, int count) {
         RadioButton button = buttons.get(type);
         if (button != null) {
             button.setText(type.getLabel() + " (" + count + ")");

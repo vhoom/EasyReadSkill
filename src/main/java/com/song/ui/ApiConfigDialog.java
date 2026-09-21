@@ -3,8 +3,6 @@ package com.song.ui;
 import com.song.config.AppConfig;
 import com.song.model.ProviderVendor;
 import com.song.skin.SkinManager;
-import com.song.skin.animation.DialogAnimator;
-import com.song.skin.control.AnimatedComboBox;
 import com.song.ui.config.BaiduConfigPane;
 import com.song.ui.config.YoudaoConfigPane;
 import com.song.util.LanguageUtils;
@@ -31,7 +29,7 @@ public class ApiConfigDialog extends Dialog<Void> {
         setTitle("API 配置");
         setResizable(true);
 
-        AnimatedComboBox<ProviderVendor> vendorBox = new AnimatedComboBox<>();
+        ComboBox<ProviderVendor> vendorBox = new ComboBox<>();
         vendorBox.getItems().setAll(ProviderVendor.values());
         vendorBox.setValue(config.getVendor());
         vendorBox.setMaxWidth(Double.MAX_VALUE);
@@ -54,7 +52,7 @@ public class ApiConfigDialog extends Dialog<Void> {
         vendorBox.valueProperty().addListener((obs, o, n) -> refreshVendor.run());
         refreshVendor.run();
 
-        AnimatedComboBox<String> sourceLangBox = new AnimatedComboBox<>();
+        ComboBox<String> sourceLangBox = new ComboBox<>();
         sourceLangBox.getItems().addAll(
                 "auto", "en", "zh", "jp", "kor", "fra", "de", "spa", "ru", "pt", "it");
         sourceLangBox.setValue(config.getSourceLang());
@@ -104,7 +102,6 @@ public class ApiConfigDialog extends Dialog<Void> {
         getDialogPane().setPrefWidth(580);
         getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         SkinManager.getInstance().applyTo(getDialogPane());
-        DialogAnimator.install(this);
 
         setResultConverter(button -> {
             if (button == ButtonType.OK) {

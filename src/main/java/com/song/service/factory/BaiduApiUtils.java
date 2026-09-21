@@ -1,5 +1,6 @@
 package com.song.service.factory;
 
+import com.song.service.HttpCalls;
 import com.song.service.TranslationErrorMessages;
 
 import com.google.gson.JsonArray;
@@ -11,7 +12,6 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -53,19 +53,27 @@ final class BaiduApiUtils {
 
     static JsonObject postForm(String apiUrl, String form) throws IOException {
         HttpURLConnection conn = open(apiUrl);
-        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
-        write(conn, form.getBytes(StandardCharsets.UTF_8));
-        return readJson(conn);
+        try {
+            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+            write(conn, form.getBytes(StandardCharsets.UTF_8));
+            return readJson(conn);
+        } finally {
+            HttpCalls.finish(conn);
+        }
     }
 
     static JsonObject postJson(String apiUrl, String json, String authorization) throws IOException {
         HttpURLConnection conn = open(apiUrl);
-        conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-        if (authorization != null && !authorization.isEmpty()) {
-            conn.setRequestProperty("Authorization", authorization);
+        try {
+            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            if (authorization != null && !authorization.isEmpty()) {
+                conn.setRequestProperty("Authorization", authorization);
+            }
+            write(conn, json.getBytes(StandardCharsets.UTF_8));
+            return readJson(conn);
+        } finally {
+            HttpCalls.finish(conn);
         }
-        write(conn, json.getBytes(StandardCharsets.UTF_8));
-        return readJson(conn);
     }
 
     static String extractDst(JsonObject json) throws IOException {
@@ -95,7 +103,7 @@ final class BaiduApiUtils {
     }
 
     private static HttpURLConnection open(String apiUrl) throws IOException {
-        HttpURLConnection conn = (HttpURLConnection) new URL(apiUrl).openConnection();
+        HttpURLConnection conn = HttpCalls.open(apiUrl);
         conn.setRequestMethod("POST");
         conn.setDoOutput(true);
         conn.setConnectTimeout(8000);

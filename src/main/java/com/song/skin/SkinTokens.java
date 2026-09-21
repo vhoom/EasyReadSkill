@@ -1,9 +1,6 @@
 package com.song.skin;
 
-/**
- * 设计令牌（Design Tokens）。
- * 所有皮肤共享同一套语义化令牌，方便后续扩展主题。
- */
+
 public record SkinTokens(
         String background,
         String surface,
@@ -13,11 +10,19 @@ public record SkinTokens(
         String border,
         String primary,
         String primaryText,
+        String primaryHover,
         String hover,
         String selection,
         String success,
         String warning,
         String danger,
+        String focusRing,
+        String mark,
+        String scrollThumb,
+        String pressed,
+        String primaryPressed,
+        String strokeStrong,
+        String focusStroke,
         String shadow,
         String fontFamily,
         int fontSize,

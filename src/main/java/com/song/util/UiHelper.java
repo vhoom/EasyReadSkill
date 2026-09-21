@@ -1,7 +1,6 @@
 package com.song.util;
 
 import com.song.skin.SkinManager;
-import com.song.skin.animation.DialogAnimator;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 
@@ -38,6 +37,5 @@ public class UiHelper {
         a.setHeaderText(null);
         a.setContentText(msg);
         SkinManager.getInstance().applyTo(a.getDialogPane());
-        DialogAnimator.install(a);
     }
 }

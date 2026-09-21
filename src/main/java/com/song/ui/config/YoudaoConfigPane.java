@@ -4,13 +4,13 @@ import com.song.config.AppConfig;
 import com.song.config.YoudaoConfig;
 import com.song.model.ProviderType;
 import com.song.model.ProviderVendor;
-import com.song.skin.control.AnimatedComboBox;
-import com.song.skin.control.AnimatedPasswordField;
-import com.song.skin.control.AnimatedTextField;
 
 import javafx.geometry.Insets;
 import javafx.scene.Node;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.PasswordField;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
@@ -20,12 +20,12 @@ import javafx.scene.layout.Priority;
  */
 public class YoudaoConfigPane extends GridPane {
 
-    private final AnimatedComboBox<ProviderType> serviceBox = new AnimatedComboBox<>();
-    private final AnimatedTextField appIdField = new AnimatedTextField();
-    private final AnimatedPasswordField secretKeyField = new AnimatedPasswordField();
-    private final AnimatedComboBox<String> domainBox = new AnimatedComboBox<>();
-    private final AnimatedComboBox<String> handleOptionBox = new AnimatedComboBox<>();
-    private final AnimatedTextField promptField = new AnimatedTextField();
+    private final ComboBox<ProviderType> serviceBox = new ComboBox<>();
+    private final TextField appIdField = new TextField();
+    private final PasswordField secretKeyField = new PasswordField();
+    private final ComboBox<String> domainBox = new ComboBox<>();
+    private final ComboBox<String> handleOptionBox = new ComboBox<>();
+    private final TextField promptField = new TextField();
 
     private final Label serviceLabel = new Label("服务类型：");
     private final Label appIdLabel = new Label("应用ID：");
