@@ -2,6 +2,7 @@ package com.song.service.factory;
 
 import com.song.config.AppConfig;
 import com.song.model.ProviderType;
+import com.song.service.HttpCalls;
 import com.song.service.TranslationResult;
 import com.google.gson.JsonObject;
 import org.slf4j.Logger;
@@ -33,6 +34,7 @@ public class BaiduGeneralTranslationProvider implements TranslationProvider {
             JsonObject json = BaiduApiUtils.postForm(API_URL, form);
             return TranslationResult.success(BaiduApiUtils.extractDst(json));
         } catch (Exception e) {
+            if (HttpCalls.causedByCancel(e)) return TranslationResult.interrupted();
             LOG.error("百度通用翻译请求失败", e);
             return TranslationResult.failure(e.getMessage() == null
                     ? "百度通用翻译请求失败" : e.getMessage());

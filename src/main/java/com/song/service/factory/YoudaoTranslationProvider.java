@@ -2,6 +2,7 @@ package com.song.service.factory;
 
 import com.song.config.AppConfig;
 import com.song.model.ProviderType;
+import com.song.service.HttpCalls;
 import com.song.service.TranslationErrorMessages;
 import com.song.service.TranslationResult;
 import com.google.gson.JsonObject;
@@ -14,7 +15,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -43,6 +43,7 @@ public class YoudaoTranslationProvider implements TranslationProvider {
             return TranslationResult.success(request(
                     appKey, secret, q, from, to, selectedModel));
         } catch (HttpStatusException e) {
+            if (HttpCalls.causedByCancel(e)) return TranslationResult.interrupted();
             // 兼容接口只接受 0/3 的情况。
             if (e.status == 400) {
                 try {
@@ -50,6 +51,7 @@ public class YoudaoTranslationProvider implements TranslationProvider {
                     return TranslationResult.success(request(
                             appKey, secret, q, from, to, "0"));
                 } catch (Exception retry) {
+                    if (HttpCalls.causedByCancel(retry)) return TranslationResult.interrupted();
                     LOG.error("有道大模型翻译请求失败", retry);
                     return TranslationResult.failure(retry.getMessage());
                 }
@@ -57,6 +59,7 @@ public class YoudaoTranslationProvider implements TranslationProvider {
             LOG.error("有道大模型翻译请求失败", e);
             return TranslationResult.failure(e.getMessage());
         } catch (Exception e) {
+            if (HttpCalls.causedByCancel(e)) return TranslationResult.interrupted();
             LOG.error("有道大模型翻译请求失败", e);
             return TranslationResult.failure(e.getMessage() == null
                     ? "有道大模型翻译请求失败" : e.getMessage());
@@ -81,60 +84,65 @@ public class YoudaoTranslationProvider implements TranslationProvider {
         addParam(form, "to", YoudaoLanguageMapper.map(to));
         addParam(form, "streamType", "full");
 
-        HttpURLConnection conn = (HttpURLConnection) new URL(API_URL).openConnection();
-        conn.setRequestMethod("POST");
-        conn.setDoOutput(true);
-        conn.setConnectTimeout(8000);
-        conn.setReadTimeout(60000);
-        conn.setRequestProperty("Accept", "*/*");
-        conn.setRequestProperty("Content-Type",
-                "application/x-www-form-urlencoded; charset=UTF-8");
-        try (OutputStream os = conn.getOutputStream()) {
-            os.write(form.toString().getBytes(StandardCharsets.UTF_8));
-        }
+        HttpURLConnection conn = HttpCalls.open(API_URL);
+        try {
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(60000);
+            conn.setRequestProperty("Accept", "*/*");
+            conn.setRequestProperty("Content-Type",
+                    "application/x-www-form-urlencoded; charset=UTF-8");
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(form.toString().getBytes(StandardCharsets.UTF_8));
+            }
 
-        int code = conn.getResponseCode();
-        if (code == 400) {
-            throw new HttpStatusException(400, readAll(conn.getErrorStream()));
-        }
-        if (code != 200) {
-            throw new HttpStatusException(code, readAll(conn.getErrorStream()));
-        }
+            int code = conn.getResponseCode();
+            if (code == 400) {
+                throw new HttpStatusException(400, readAll(conn.getErrorStream()));
+            }
+            if (code != 200) {
+                throw new HttpStatusException(code, readAll(conn.getErrorStream()));
+            }
 
-        String lastFull = null;
-        try (BufferedReader br = new BufferedReader(
-                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty()) continue;
-                if (line.startsWith("data:")) line = line.substring(5).trim();
-                if ("[DONE]".equals(line)) break;
-                JsonObject json;
-                try {
-                    json = JsonParser.parseString(line).getAsJsonObject();
-                } catch (Exception ignore) {
-                    continue;
-                }
-                if (json.has("successful") && !json.get("successful").getAsBoolean()) {
-                    String errCode = json.has("code") ? json.get("code").getAsString() : "?";
-                    throw new IllegalStateException(TranslationErrorMessages.youdao(errCode));
-                }
-                if (json.has("code") && !"0".equals(json.get("code").getAsString())) {
-                    throw new IllegalStateException(
-                            TranslationErrorMessages.youdao(json.get("code").getAsString()));
-                }
-                JsonObject data = json.has("data") && json.get("data").isJsonObject()
-                        ? json.getAsJsonObject("data") : null;
-                if (data != null && data.has("transFull")) {
-                    lastFull = data.get("transFull").getAsString();
+            String lastFull = null;
+            try (BufferedReader br = new BufferedReader(
+                    new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    if (HttpCalls.isCancelled()) throw new java.io.InterruptedIOException("已中断");
+                    line = line.trim();
+                    if (line.isEmpty()) continue;
+                    if (line.startsWith("data:")) line = line.substring(5).trim();
+                    if ("[DONE]".equals(line)) break;
+                    JsonObject json;
+                    try {
+                        json = JsonParser.parseString(line).getAsJsonObject();
+                    } catch (Exception ignore) {
+                        continue;
+                    }
+                    if (json.has("successful") && !json.get("successful").getAsBoolean()) {
+                        String errCode = json.has("code") ? json.get("code").getAsString() : "?";
+                        throw new IllegalStateException(TranslationErrorMessages.youdao(errCode));
+                    }
+                    if (json.has("code") && !"0".equals(json.get("code").getAsString())) {
+                        throw new IllegalStateException(
+                                TranslationErrorMessages.youdao(json.get("code").getAsString()));
+                    }
+                    JsonObject data = json.has("data") && json.get("data").isJsonObject()
+                            ? json.getAsJsonObject("data") : null;
+                    if (data != null && data.has("transFull")) {
+                        lastFull = data.get("transFull").getAsString();
+                    }
                 }
             }
+            if (lastFull == null || lastFull.isEmpty()) {
+                throw new IllegalStateException("有道大模型翻译返回结果为空");
+            }
+            return lastFull;
+        } finally {
+            HttpCalls.finish(conn);
         }
-        if (lastFull == null || lastFull.isEmpty()) {
-            throw new IllegalStateException("有道大模型翻译返回结果为空");
-        }
-        return lastFull;
     }
 
     private static void addParam(StringBuilder form, String key, String value) {

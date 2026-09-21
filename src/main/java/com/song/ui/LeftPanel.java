@@ -3,8 +3,8 @@ package com.song.ui;
 import com.song.model.FilterType;
 import com.song.model.SkillFile;
 import com.song.model.TranslateStatus;
-import com.song.skin.control.AnimatedCheckBox;
-import com.song.skin.control.AnimatedListCell;
+import com.song.skin.SkinManager;
+import com.song.skin.SkinTokens;
 import com.song.util.UiHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,17 +37,17 @@ public class LeftPanel extends VBox {
     public LeftPanel(AppState state) {
         this.state = state;
 
-        Label title = new Label("skill.md 列表");
-        title.setStyle("-fx-font-weight: bold; -fx-padding: 6 8 6 8;");
+        Label title = new Label("skills");
+        title.getStyleClass().add("section-title");
 
         Button selectAllBtn = new Button("全选");
         Button invertBtn = new Button("反选");
-        Button clearBtn = new Button("取消选择");
+        Button clearBtn = new Button("取消");
         Region headerSpacer = new Region();
         HBox.setHgrow(headerSpacer, Priority.ALWAYS);
-        HBox header = new HBox(6, title, headerSpacer, selectAllBtn, invertBtn, clearBtn);
+        HBox header = new HBox(8, title, headerSpacer, selectAllBtn, invertBtn, clearBtn);
         header.setAlignment(Pos.CENTER_LEFT);
-        header.setPadding(new Insets(4, 6, 4, 6));
+        header.setPadding(new Insets(12, 16, 4, 16));
 
         filtered = new FilteredList<>(state.getAllFiles(), f -> true);
         listView.setItems(filtered);
@@ -83,6 +83,7 @@ public class LeftPanel extends VBox {
             applyFilter();
             listView.refresh();
         });
+        SkinManager.getInstance().skinProperty().addListener((obs, o, n) -> listView.refresh());
 
         VBox.setVgrow(listView, Priority.ALWAYS);
         getChildren().addAll(header, listView);
@@ -168,8 +169,8 @@ public class LeftPanel extends VBox {
 
     // ========== Cell ==========
 
-    private class SkillCell extends AnimatedListCell<SkillFile> {
-        private final AnimatedCheckBox cb = new AnimatedCheckBox();
+    private class SkillCell extends ListCell<SkillFile> {
+        private final CheckBox cb = new CheckBox();
         private final Label nameLabel = new Label();
         private final Label pathLabel = new Label();
         private final VBox box = new VBox(2);
@@ -178,14 +179,14 @@ public class LeftPanel extends VBox {
         private SkillFile bound;
 
         SkillCell() {
-            nameLabel.setStyle("-fx-font-size: 13; -fx-font-weight: bold;");
-            pathLabel.setStyle("-fx-font-size: 11; -fx-text-fill: #888;");
+            nameLabel.getStyleClass().add("item-name");
+            pathLabel.getStyleClass().add("secondary");
 
             HBox line = new HBox(8, cb, nameLabel);
             line.setAlignment(Pos.CENTER_LEFT);
 
             box.getChildren().addAll(line, pathLabel);
-            box.setPadding(new Insets(4, 6, 4, 6));
+            box.setPadding(new Insets(6, 8, 6, 4));
 
             cb.selectedProperty().addListener((obs, o, n) -> {
                 if (updating) return;
@@ -222,10 +223,12 @@ public class LeftPanel extends VBox {
             tooltip.setText(sf.getFilePath());
             setTooltip(tooltip);
 
+            SkinTokens tokens = SkinManager.getInstance().getSkin().getTokens();
+            pathLabel.setTextFill(Color.web(tokens.textSecondary()));
             switch (sf.getStatus()) {
-                case UNTRANSLATED: nameLabel.setTextFill(Color.web("#333333")); break;
-                case TRANSLATED: nameLabel.setTextFill(Color.web("#2e7d32")); break;
-                case FAILED: nameLabel.setTextFill(Color.web("#c62828")); break;
+                case UNTRANSLATED: nameLabel.setTextFill(Color.web(tokens.text())); break;
+                case TRANSLATED: nameLabel.setTextFill(Color.web(tokens.success())); break;
+                case FAILED: nameLabel.setTextFill(Color.web(tokens.danger())); break;
             }
             updating = false;
             setGraphic(box);

@@ -44,8 +44,12 @@ public class AppConfig {
         ensureDefaultScanPaths();
     }
 
+    /**
+     * 仅在扫描路径为空时填入默认目录，避免每次加载配置都追加三十多条。
+     */
     public void ensureDefaultScanPaths() {
         if (scanPaths == null) scanPaths = new ArrayList<>();
+        if (!scanPaths.isEmpty()) return;
 
         String home = System.getProperty("user.home");
         String[] names = {
@@ -58,12 +62,7 @@ public class AppConfig {
         };
 
         for (String name : names) {
-            String path = Paths.get(home, name).toString();
-            boolean exists = scanPaths.stream()
-                    .anyMatch(sp -> path.equalsIgnoreCase(sp.getPath()));
-            if (!exists) {
-                scanPaths.add(new ScanPath(path, false));
-            }
+            scanPaths.add(new ScanPath(Paths.get(home, name).toString(), false));
         }
     }
 

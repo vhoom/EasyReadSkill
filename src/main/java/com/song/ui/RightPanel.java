@@ -5,28 +5,29 @@ import com.song.model.EffectType;
 import com.song.model.SkillFile;
 import com.song.model.TranslateStatus;
 import com.song.model.TranslationRecord;
+import com.song.service.HttpCalls;
 import com.song.service.SkillFileService;
 import com.song.service.SkillParser;
 import com.song.service.TranslationResult;
-import com.song.skin.control.AnimatedButton;
-import com.song.skin.control.AnimatedTextArea;
 import com.song.util.UiHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javafx.application.Platform;
 import javafx.geometry.Insets;
-import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -40,63 +41,69 @@ public class RightPanel extends VBox {
     private final AppState state;
 
     private final Label originalLabel = new Label("备份数据：");
-    private final AnimatedTextArea originalArea = new AnimatedTextArea();
-    private static final DateTimeFormatter TIME_FORMATTER =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
+    private final TextArea originalArea = new TextArea();
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+            .withZone(ZoneId.systemDefault());
 
     private final Label translatedLabel = new Label("实际读取数据：");
-//    private final Label backupTimeLabel = new Label("翻译更新时间：--");
-    private final AnimatedTextArea translatedArea = new AnimatedTextArea();
+    private final Label backupTimeLabel = new Label("翻译更新时间：--");
+    private final TextArea translatedArea = new TextArea();
 
     private final ToggleGroup effectGroup = new ToggleGroup();
     private final ProgressBar progressBar = new ProgressBar(0);
     private final Label progressLabel = new Label("");
-    private final AnimatedButton stopButton = new AnimatedButton("中断翻译");
+    private final Button stopButton = new Button("中断翻译");
 
     private volatile boolean stopFlag = false;
+    private volatile ExecutorService pool;
+    private final Set<Thread> translateThreads = ConcurrentHashMap.newKeySet();
     private Thread worker;
 
     public RightPanel(AppState state) {
         this.state = state;
         setSpacing(0);
-        setPadding(new Insets(8));
+        setPadding(new Insets(20, 24, 16, 24));
         getStyleClass().add("right-panel");
 
-
-
-        originalLabel.setStyle("-fx-font-weight: bold;");
+        originalLabel.getStyleClass().add("eyebrow");
         originalArea.setEditable(false);
         originalArea.setWrapText(true);
-        originalArea.setPrefRowCount(5);
 
-//        backupTimeLabel.getStyleClass().add("secondary");
-//        backupTimeLabel.setStyle("-fx-font-size: 11;");
+        backupTimeLabel.getStyleClass().add("secondary");
 
-        translatedLabel.setStyle("-fx-font-weight: bold;");
+        translatedLabel.getStyleClass().add("eyebrow");
         translatedLabel.setVisible(true);
         translatedArea.setEditable(false);
         translatedArea.setWrapText(true);
-        translatedArea.setPrefRowCount(5);
         translatedArea.setVisible(true);
 
-        Label effectLabel = new Label("翻译效果：");
+        Label effectLabel = new Label("翻译效果");
+        effectLabel.getStyleClass().add("eyebrow");
         HBox effectBox = new HBox(12);
         for (EffectType et : EffectType.values()) {
             RadioButton rb = new RadioButton(et.getLabel());
             rb.setToggleGroup(effectGroup);
             rb.setUserData(et);
-            if (et == state.getEffect()) rb.setSelected(true);
+            rb.setTooltip(new Tooltip(effectHint(et)));
+            if (et == state.getEffect())
+                rb.setSelected(true);
             rb.selectedProperty().addListener((obs, o, n) -> {
-                if (n) state.effectProperty().set(et);
+                if (n)
+                    state.effectProperty().set(et);
             });
             effectBox.getChildren().add(rb);
         }
 
-        AnimatedButton retranslate = new AnimatedButton("重新翻译");
-        AnimatedButton transCur = new AnimatedButton("翻译当前文件");
-        AnimatedButton transSel = new AnimatedButton("翻译勾选文件");
-        AnimatedButton restore = new AnimatedButton("还原成备份");
-        AnimatedButton rebackup = new AnimatedButton("重新备份");
+        Button retranslate = new Button("重新翻译");
+        retranslate.setTooltip(new Tooltip("强制使用 api 翻译"));
+        Button transCur = new Button("翻译当前文件");
+        transCur.setTooltip(new Tooltip("与过往翻译过的原文若相同则不走 api，将会使用它"));
+        Button transSel = new Button("翻译勾选文件");
+        transSel.getStyleClass().add("primary");
+        Button restore = new Button("还原成备份");
+        restore.setTooltip(new Tooltip("把实际数据变成备份的数据"));
+        Button rebackup = new Button("重新备份");
+        rebackup.setTooltip(new Tooltip("把备份的数据重新设为读取到的数据"));
         stopButton.setDisable(true);
 
         retranslate.setOnAction(e -> retranslateCurrent());
@@ -104,49 +111,49 @@ public class RightPanel extends VBox {
         transSel.setOnAction(e -> translateSelected());
         restore.setOnAction(e -> restoreCurrent());
         rebackup.setOnAction(e -> rebackupCurrent());
-        stopButton.setOnAction(e -> stopFlag = true);
+        stopButton.setOnAction(e -> {
+            stopFlag = true;
+            HttpCalls.cancelAll();
+            for (Thread t : translateThreads)
+                t.interrupt();
+        });
 
-        for (Button b : List.of(retranslate, transCur, transSel, restore, rebackup, stopButton)) {
-            b.setMinWidth(110);
-            b.setPrefWidth(120);
-        }
-
-        HBox btnBox = new HBox(8, retranslate, transCur, transSel, stopButton, restore, rebackup);
+        HBox btnBox = new HBox(8, transSel, transCur, retranslate, stopButton, restore, rebackup);
         btnBox.setAlignment(Pos.CENTER_LEFT);
 
-        progressBar.setPrefWidth(220);
+        progressBar.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(progressBar, Priority.ALWAYS);
         HBox progBox = new HBox(8, progressBar, progressLabel);
         progBox.setAlignment(Pos.CENTER_LEFT);
         setProgressVisible(false);
 
-        VBox topBox = new VBox(6,
-                originalLabel, originalArea,
-                translatedLabel, translatedArea);
-        topBox.setPadding(new Insets(0, 0, 6, 0));
-
-        VBox bottomBox = new VBox(6,
-                effectLabel, effectBox,
-                btnBox, progBox);
-        bottomBox.setPadding(new Insets(6, 0, 0, 0));
-
+        VBox reading = new VBox(8, originalLabel, originalArea, backupTimeLabel, translatedLabel, translatedArea);
         VBox.setVgrow(originalArea, Priority.ALWAYS);
         VBox.setVgrow(translatedArea, Priority.ALWAYS);
+        VBox.setVgrow(reading, Priority.ALWAYS);
 
-        SplitPane split = new SplitPane(topBox, bottomBox);
-        split.setOrientation(Orientation.VERTICAL);
-        split.setDividerPositions(0.65);
-        VBox.setVgrow(split, Priority.ALWAYS);
+        VBox actionBar = new VBox(12, effectLabel, effectBox, btnBox, progBox);
+        actionBar.getStyleClass().add("action-bar");
+        actionBar.setPadding(new Insets(16, 0, 0, 0));
 
-        getChildren().add(split);
+        getChildren().addAll(reading, actionBar);
 
         state.selectedFileProperty().addListener((obs, o, n) -> showFile(n));
         state.versionProperty().addListener((obs, o, n) -> showFile(state.getSelectedFile()));
     }
+
+    private static String effectHint(EffectType effect) {
+        return switch (effect) {
+            case OVERWRITE -> "译文直接覆盖原 Description";
+            case KEEP_ENGLISH -> "译文与原文同时写入，格式为“译文/原文”";
+        };
+    }
+
     private void showFile(SkillFile sf) {
         if (sf == null) {
             originalLabel.setText("备份数据：");
             originalArea.clear();
-//            backupTimeLabel.setText("翻译更新时间：--");
+            backupTimeLabel.setText("翻译更新时间：--");
             translatedLabel.setText("实际读取数据：");
             translatedArea.clear();
             return;
@@ -163,13 +170,13 @@ public class RightPanel extends VBox {
             originalArea.setText("（当前文件还没有备份数据，翻译时会自动备份）");
         }
 
-//        long lastTranslate = rec != null ? rec.getLastTranslateTimestamp() : 0L;
-//        if (lastTranslate > 0) {
-//            backupTimeLabel.setText("翻译更新时间："
-//                    + TIME_FORMATTER.format(Instant.ofEpochMilli(lastTranslate)));
-//        } else {
-//            backupTimeLabel.setText("翻译更新时间：--");
-//        }
+        long lastTranslate = rec != null ? rec.getLastTranslateTimestamp() : 0L;
+        if (lastTranslate > 0) {
+            backupTimeLabel.setText("翻译更新时间："
+                    + TIME_FORMATTER.format(Instant.ofEpochMilli(lastTranslate)));
+        } else {
+            backupTimeLabel.setText("翻译更新时间：--");
+        }
 
         // 下块：实际读取数据
         String current;
@@ -188,20 +195,24 @@ public class RightPanel extends VBox {
         }
         translatedArea.setText(current);
     }
+
     private List<SkillFile> getCheckedFiles() {
         List<SkillFile> checked = new ArrayList<>();
         for (SkillFile sf : state.getAllFiles()) {
-            if (sf.isSelected()) checked.add(sf);
+            if (sf.isSelected())
+                checked.add(sf);
         }
         return checked;
     }
 
     private List<SkillFile> getActionTargets() {
         List<SkillFile> checked = getCheckedFiles();
-        if (!checked.isEmpty()) return checked;
+        if (!checked.isEmpty())
+            return checked;
 
         SkillFile current = state.getSelectedFile();
-        if (current == null) return List.of();
+        if (current == null)
+            return List.of();
         return List.of(current);
     }
 
@@ -226,7 +237,8 @@ public class RightPanel extends VBox {
             return;
         }
         if (sf.getStatus() == TranslateStatus.TRANSLATED) {
-            if (!UiHelper.confirm("确认", "该文件已经翻译过，继续会浪费 API 额度。是否继续？")) return;
+            if (!UiHelper.confirm("确认", "该文件已经翻译过，继续会浪费 API 额度。是否继续？"))
+                return;
         }
         List<SkillFile> targets = new ArrayList<>();
         targets.add(sf);
@@ -250,54 +262,45 @@ public class RightPanel extends VBox {
         startTranslate(selected, true);
     }
 
-    /**
-     * 根据 CPU、内存和任务数量动态计算线程数。
-     * 任务很少时不会创建多余线程，机器配置较低时自动降低并发。
-     */
-    private int calculateThreadCount(int taskCount) {
-        if (taskCount <= 0) return 0;
-
-        int cores = Runtime.getRuntime().availableProcessors();
-        long maxMemoryMb = Runtime.getRuntime().maxMemory() / (1024 * 1024);
-
-        int cpuBased = Math.max(1, cores);
-        int memoryBased;
-        if (maxMemoryMb < 512) {
-            memoryBased = 2;
-        } else if (maxMemoryMb < 1024) {
-            memoryBased = 4;
-        } else {
-            memoryBased = 8;
-        }
-
-        int machineLimit = Math.max(1, Math.min(8, Math.min(cpuBased, memoryBased)));
-        return Math.min(taskCount, machineLimit);
-    }
-
     private void startTranslate(List<SkillFile> targets, boolean useCache) {
         if (worker != null && worker.isAlive()) {
             UiHelper.warn("提示", "已有翻译任务正在运行。");
             return;
         }
+        HttpCalls.arm();
         stopFlag = false;
         stopButton.setDisable(false);
         EffectType effect = state.getEffect();
         String from = state.getConfig().getSourceLang();
         String to = state.getConfig().getTargetLang();
-        int interval = state.getConfig().getRequestIntervalMs();
         int total = targets.size();
-        int threadCount = calculateThreadCount(total);
+        // ponytail: 请求间隔在 TranslationService 里排队，线程只用来重叠在途 HTTP
+        int threadCount = Math.min(total, 4);
 
         progressBar.setProgress(0);
         progressLabel.setText("0/" + total);
         setProgressVisible(true);
-        log("开始并发翻译 " + total + " 个文件，线程数：" + threadCount
+        log("开始翻译 " + total + " 个文件，线程数：" + threadCount
+                + "，间隔：" + state.getConfig().getRequestIntervalMs() + "ms"
                 + "，效果：" + effect.getLabel());
 
         worker = new Thread(() -> {
-            ExecutorService pool = Executors.newFixedThreadPool(threadCount);
+            translateThreads.clear();
+            pool = Executors.newFixedThreadPool(threadCount, task -> {
+                Thread t = new Thread(() -> {
+                    try {
+                        task.run();
+                    } finally {
+                        translateThreads.remove(Thread.currentThread());
+                    }
+                }, "translate-worker");
+                t.setDaemon(true);
+                translateThreads.add(t);
+                return t;
+            });
             AtomicInteger ok = new AtomicInteger();
             AtomicInteger fail = new AtomicInteger();
+            AtomicInteger stopped = new AtomicInteger();
             AtomicInteger completed = new AtomicInteger();
             Queue<String> errors = new ConcurrentLinkedQueue<>();
             CountDownLatch latch = new CountDownLatch(total);
@@ -307,30 +310,41 @@ public class RightPanel extends VBox {
                 int idx = i + 1;
                 pool.submit(() -> {
                     try {
-                        if (stopFlag) return;
+                        if (stopFlag || HttpCalls.isCancelled()) {
+                            stopped.incrementAndGet();
+                            return;
+                        }
                         log(String.format("[%d/%d] %s", idx, total, sf.getParentName()));
-
-
-                        if (stopFlag) return;
 
                         TranslationResult result = state.getFileService()
                                 .translateFile(sf.getFilePath(), effect, from, to, useCache);
 
+                        if (stopFlag || result.isInterrupted()) {
+                            stopped.incrementAndGet();
+                            log("    已中断");
+                            return;
+                        }
                         if (result.isSuccess()) {
                             ok.incrementAndGet();
                             sf.setStatus(TranslateStatus.TRANSLATED);
                             TranslationRecord rec = state.getRecordManager().get(sf.getFilePath());
-                            if (rec != null) sf.setTranslatedDescription(rec.getTranslatedDescription());
+                            if (rec != null)
+                                sf.setTranslatedDescription(rec.getTranslatedDescription());
                             log("    OK");
                         } else {
                             fail.incrementAndGet();
                             sf.setStatus(TranslateStatus.FAILED);
                             String error = result.getErrorMessage() == null
-                                    ? "翻译失败" : result.getErrorMessage();
+                                    ? "翻译失败"
+                                    : result.getErrorMessage();
                             errors.add(sf.getParentName() + "：" + error);
                             log("    失败：" + error);
                         }
                     } catch (Exception e) {
+                        if (stopFlag || HttpCalls.isCancelled()) {
+                            stopped.incrementAndGet();
+                            return;
+                        }
                         fail.incrementAndGet();
                         errors.add(sf.getParentName() + "：" + e.getMessage());
                     } finally {
@@ -350,18 +364,24 @@ public class RightPanel extends VBox {
                 latch.await();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+            } finally {
+                pool.shutdownNow();
             }
 
             final int fok = ok.get();
             final int ffail = fail.get();
+            final int fstop = stopped.get();
+            final boolean halted = stopFlag || fstop > 0;
             Platform.runLater(() -> {
-                log(String.format("完成：成功 %d，失败 %d", fok, ffail));
+                log(String.format("完成：成功 %d，失败 %d，中断 %d", fok, ffail, fstop));
                 stopButton.setDisable(true);
-                progressLabel.setText("完成");
+                progressLabel.setText(halted ? "已中断" : "完成");
                 setProgressVisible(false);
                 state.bumpVersion();
                 showFile(state.getSelectedFile());
-                UiHelper.info("翻译完成", "成功 " + fok + "，失败 " + ffail);
+                UiHelper.info(halted ? "已中断" : "翻译完成",
+                        "成功 " + fok + "，失败 " + ffail
+                                + (halted ? "，未完成 " + fstop : ""));
                 if (!errors.isEmpty()) {
                     UiHelper.error("翻译失败", String.join("\n", errors));
                 }
@@ -370,6 +390,7 @@ public class RightPanel extends VBox {
         worker.setDaemon(true);
         worker.start();
     }
+
     private void restoreCurrent() {
         List<SkillFile> targets = getActionTargets();
         if (targets.isEmpty()) {
@@ -379,13 +400,15 @@ public class RightPanel extends VBox {
 
         List<SkillFile> restorable = new ArrayList<>();
         for (SkillFile sf : targets) {
-            if (sf.getStatus() == TranslateStatus.TRANSLATED) restorable.add(sf);
+            if (sf.getStatus() == TranslateStatus.TRANSLATED)
+                restorable.add(sf);
         }
         if (restorable.isEmpty()) {
             UiHelper.warn("提示", "没有可还原的已翻译文件。");
             return;
         }
-        if (!UiHelper.confirm("确认", "确定要还原 " + restorable.size() + " 个文件吗？")) return;
+        if (!UiHelper.confirm("确认", "确定要还原 " + restorable.size() + " 个文件吗？"))
+            return;
 
         int ok = 0;
         int fail = 0;
@@ -425,7 +448,8 @@ public class RightPanel extends VBox {
             message = "有 " + translated + " 个文件已翻译，重新备份会把当前译文当作原始备份！\n\n"
                     + message;
         }
-        if (!UiHelper.confirm("确认重新备份", message)) return;
+        if (!UiHelper.confirm("确认重新备份", message))
+            return;
 
         int ok = 0;
         int fail = 0;
@@ -450,6 +474,7 @@ public class RightPanel extends VBox {
             UiHelper.warn("完成", "成功 " + ok + " 个，失败 " + fail + " 个。");
         }
     }
+
     private void setProgressVisible(boolean visible) {
         progressBar.setVisible(visible);
         progressBar.setManaged(visible);

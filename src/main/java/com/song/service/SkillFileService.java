@@ -8,8 +8,12 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.List;
 
 public class SkillFileService {
@@ -29,7 +33,16 @@ public class SkillFileService {
     }
 
     public static void writeFile(String filePath, String content) throws IOException {
-        Files.writeString(Paths.get(filePath), content, StandardCharsets.UTF_8);
+        Path target = Paths.get(filePath);
+        Path tmp = target.resolveSibling(target.getFileName().toString() + ".tmp");
+        Files.writeString(tmp, content, StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        try {
+            Files.move(tmp, target,
+                    StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     /** 首次备份：只要 records 里没有原始 Description，就写入 */
@@ -77,6 +90,9 @@ public class SkillFileService {
     public TranslationResult translateFile(String filePath, EffectType effect,
                                            String from, String to, boolean useCache) {
         try {
+            if (stopped()) {
+                return TranslationResult.interrupted();
+            }
             ensureBackup(filePath);
 
             String content = readFile(filePath);
@@ -102,7 +118,6 @@ public class SkillFileService {
                         : TextSegmenter.split(sourceText, 1800);
 
                 StringBuilder fullTranslation = new StringBuilder();
-                int interval = translationService.getRequestIntervalMs();
                 for (int i = 0; i < chunks.size(); i++) {
                     String chunk = chunks.get(i);
                     if (chunk.isEmpty()) {
@@ -110,7 +125,13 @@ public class SkillFileService {
                         continue;
                     }
 
+                    if (stopped()) {
+                        return TranslationResult.interrupted();
+                    }
                     TranslationResult result = translationService.translate(chunk, from, to);
+                    if (result.isInterrupted()) {
+                        return result;
+                    }
                     if (!result.isSuccess()) {
                         LOG.warn("翻译服务返回失败: {} - {}", filePath, result.getErrorMessage());
                         recordManager.recordFailure(filePath);
@@ -136,6 +157,10 @@ public class SkillFileService {
                     ? translated
                     : translated + "/" + sourceText;
 
+            if (stopped()) {
+                return TranslationResult.interrupted();
+            }
+
             String newContent = SkillParser.replaceDescription(content, newDesc);
             writeFile(filePath, newContent);
 
@@ -144,11 +169,18 @@ public class SkillFileService {
             return TranslationResult.success(newDesc);
 
         } catch (Exception e) {
+            if (stopped()) {
+                return TranslationResult.interrupted();
+            }
             LOG.error("翻译异常: {}", filePath, e);
             recordManager.recordFailure(filePath);
             return TranslationResult.failure(e.getMessage() == null
                     ? "翻译异常" : e.getMessage());
         }
+    }
+
+    private static boolean stopped() {
+        return HttpCalls.isCancelled();
     }
 
     private String buildCacheKey(String original, String from, String to) {

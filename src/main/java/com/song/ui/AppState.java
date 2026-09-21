@@ -49,7 +49,7 @@ public class AppState {
             effect.set(EffectType.OVERWRITE);
         }
         try {
-            SkinManager.getInstance().setSkinType(SkinType.valueOf(config.getSkinType()));
+            SkinManager.getInstance().setSkinType(SkinType.fromConfig(config.getSkinType()));
         } catch (Exception ignored) {
             SkinManager.getInstance().setSkinType(SkinType.LIGHT);
         }
@@ -111,7 +111,7 @@ public class AppState {
         for (TranslationRecord rec : recordManager.all().values()) {
             if (rec == null || rec.getPath() == null) continue;
             File file = new File(rec.getPath());
-            if (!file.isFile()) continue;
+            if (!FileScanner.isOutermostSkillFile(file)) continue;
 
             String parentName = file.getParentFile() == null ? "" : file.getParentFile().getName();
             SkillFile sf = new SkillFile(rec.getPath(), parentName);
@@ -124,14 +124,11 @@ public class AppState {
         bumpVersion();
     }
 
-    /** 重新扫描所有已启用路径，并把新的 skill 批量写入数据库。 */
-    public void reload() {
-        allFiles.clear();
+    /** 扫描文件系统并备份，不碰 JavaFX 列表。可在后台线程调用。 */
+    public List<SkillFile> scanFiles() {
         List<SkillFile> found = FileScanner.scan(config.getScanPaths());
-
         Map<String, String> backups = new ConcurrentHashMap<>();
 
-        // 并行读取文件，减少大量 skill.md 的扫描等待时间。
         found.parallelStream().forEach(sf -> {
             try {
                 String content = SkillFileService.readFile(sf.getFilePath());
@@ -160,8 +157,12 @@ public class AppState {
                 sf.setTranslatedDescription(rec.getTranslatedDescription());
             }
         }
+        return found;
+    }
 
-        allFiles.addAll(found);
+    /** 必须在 JavaFX 线程调用。 */
+    public void applyScannedFiles(List<SkillFile> found) {
+        allFiles.setAll(found);
         restoreLastSelection();
         bumpVersion();
     }

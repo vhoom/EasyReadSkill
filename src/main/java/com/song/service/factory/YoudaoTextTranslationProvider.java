@@ -2,6 +2,7 @@ package com.song.service.factory;
 
 import com.song.config.AppConfig;
 import com.song.model.ProviderType;
+import com.song.service.HttpCalls;
 import com.song.service.TranslationErrorMessages;
 import com.song.service.TranslationResult;
 import com.google.gson.JsonArray;
@@ -14,7 +15,6 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -56,43 +56,48 @@ public class YoudaoTextTranslationProvider implements TranslationProvider {
                 addParam(form, "domain", config.getYoudaoDomain());
             }
 
-            HttpURLConnection conn = (HttpURLConnection) new URL(API_URL).openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(30000);
-            conn.setRequestProperty("Content-Type",
-                    "application/x-www-form-urlencoded; charset=UTF-8");
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(form.toString().getBytes(StandardCharsets.UTF_8));
-            }
+            HttpURLConnection conn = HttpCalls.open(API_URL);
+            try {
+                conn.setRequestMethod("POST");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(30000);
+                conn.setRequestProperty("Content-Type",
+                        "application/x-www-form-urlencoded; charset=UTF-8");
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(form.toString().getBytes(StandardCharsets.UTF_8));
+                }
 
-            int code = conn.getResponseCode();
-            if (code != 200) {
-                throw new IllegalStateException("HTTP " + code + " - " + API_URL);
+                int code = conn.getResponseCode();
+                if (code != 200) {
+                    throw new IllegalStateException("HTTP " + code + " - " + API_URL);
+                }
+                StringBuilder sb = new StringBuilder();
+                try (BufferedReader br = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                }
+                JsonObject json = JsonParser.parseString(sb.toString()).getAsJsonObject();
+                if (json.has("errorCode") && !"0".equals(json.get("errorCode").getAsString())) {
+                    String errCode = json.get("errorCode").getAsString();
+                    throw new IllegalStateException(TranslationErrorMessages.youdao(errCode));
+                }
+                JsonArray translation = json.getAsJsonArray("translation");
+                if (translation == null || translation.isEmpty()) {
+                    throw new IllegalStateException("有道文本翻译返回结果为空");
+                }
+                StringBuilder translated = new StringBuilder();
+                for (int i = 0; i < translation.size(); i++) {
+                    if (translated.length() > 0) translated.append('\n');
+                    translated.append(translation.get(i).getAsString());
+                }
+                return TranslationResult.success(translated.toString());
+            } finally {
+                HttpCalls.finish(conn);
             }
-            StringBuilder sb = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = br.readLine()) != null) sb.append(line);
-            }
-            JsonObject json = JsonParser.parseString(sb.toString()).getAsJsonObject();
-            if (json.has("errorCode") && !"0".equals(json.get("errorCode").getAsString())) {
-                String errCode = json.get("errorCode").getAsString();
-                throw new IllegalStateException(TranslationErrorMessages.youdao(errCode));
-            }
-            JsonArray translation = json.getAsJsonArray("translation");
-            if (translation == null || translation.isEmpty()) {
-                throw new IllegalStateException("有道文本翻译返回结果为空");
-            }
-            StringBuilder translated = new StringBuilder();
-            for (int i = 0; i < translation.size(); i++) {
-                if (translated.length() > 0) translated.append('\n');
-                translated.append(translation.get(i).getAsString());
-            }
-            return TranslationResult.success(translated.toString());
         } catch (Exception e) {
+            if (HttpCalls.causedByCancel(e)) return TranslationResult.interrupted();
             LOG.error("有道文本翻译请求失败", e);
             return TranslationResult.failure(e.getMessage() == null
                     ? "有道文本翻译请求失败" : e.getMessage());

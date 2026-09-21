@@ -1,7 +1,7 @@
 package com.song.skin;
 
 /**
- * 皮肤对象，承载皮肤类型、设计令牌和自动生成的 CSS。
+ * 皮肤对象：类型、设计令牌、生成的 CSS。
  */
 public class AppSkin {
 
@@ -13,6 +13,12 @@ public class AppSkin {
         this.type = type;
         this.tokens = tokens;
         this.css = css;
+    }
+
+    public static AppSkin of(SkinType type) {
+        SkinType t = type != null ? type : SkinType.LIGHT;
+        SkinTokens tokens = t.tokens();
+        return new AppSkin(t, tokens, new CssBuilder(tokens).build());
     }
 
     public SkinType getType() { return type; }

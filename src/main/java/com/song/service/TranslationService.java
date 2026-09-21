@@ -31,7 +31,12 @@ public class TranslationService {
     }
 
     public TranslationResult translate(String q, String from, String to) {
-        waitForRateLimit();
+        if (HttpCalls.isCancelled()) {
+            return TranslationResult.interrupted();
+        }
+        if (!waitForRateLimit()) {
+            return TranslationResult.interrupted();
+        }
 
         TranslationProvider current = provider;
         if (current == null) {
@@ -41,10 +46,10 @@ public class TranslationService {
         return current.translate(q, from, to, config);
     }
 
-    /** 全局请求节流，避免多线程同时请求触发 API 频率限制。 */
-    private void waitForRateLimit() {
+    /** 全局请求节流。被中断则返回 false，调用方不得继续发请求。 */
+    private boolean waitForRateLimit() {
         int interval = config.getRequestIntervalMs();
-        if (interval <= 0) return;
+        if (interval <= 0) return !HttpCalls.isCancelled();
 
         long now = System.currentTimeMillis();
         long next = nextRequestTime.updateAndGet(prev -> Math.max(prev, now) + interval);
@@ -54,7 +59,9 @@ public class TranslationService {
                 Thread.sleep(wait);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                return false;
             }
         }
+        return !HttpCalls.isCancelled();
     }
 }
