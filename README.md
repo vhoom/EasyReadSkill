@@ -1,7 +1,11 @@
 # EasyReadSkill
 EasyReadSkill 是一个基于 JavaFX 的技能说明翻译工具。它只扫描文件名恰好为 `SKILL.md` 的最外层技能目录，提取 frontmatter 里的 `Description`，调用翻译服务后写回文件。子目录里的 `skill.md` 或另一份 `SKILL.md` 不会被当成独立技能。
 
-项目当前支持服务商 百度翻译 有道智云,后续增加适配
+支持提供商：
+
+- 百度翻译（通用 / 领域 / 大模型）
+- 有道智云（文本 / 大模型）
+- OpenAI 兼容大模型：DeepSeek、智谱、Gemini、Kimi、OpenAI、通义千问
 
 ---
 
@@ -16,22 +20,38 @@ EasyReadSkill 是一个基于 JavaFX 的技能说明翻译工具。它只扫描�
 - 顶部筛选显示数量
 - 支持全选、反选、取消选择
 - 双击列表文件打开所在目录
-- 支持浅色 / 深色主题（Claude 色板：暖奶油画布、珊瑚色主操作；深色为暖近黑产品表面），选择会写入配置
 - 换肤与对话框有轻量淡入
 - 顶栏可改源语言和目标语言
 - 支持 Windows 原生标题栏深色主题
 - 日志输出到 `~/.easyReadSkill/logs`
 
 ---
+
 ## 运行
 
-### 方式一：运行 exe（推荐，无需安装 Java）
+### 方式一：完整依赖 Jar
 
-前往 Releases 页面下载最新的 Windows 压缩包：
+下载：
 
-[**→ 点击前往 Releases 下载最新版本**](https://github.com/vhoom/EasyReadSkill/releases/latest)
+```text
+EasyReadSkill.jar
+```
 
-下载文件：
+确保本机已安装：
+
+```text
+Java 17+
+```
+
+运行：
+
+```powershell
+java -jar EasyReadSkill.jar
+```
+
+### 方式二： 运行exe
+
+下载：
 
 ```text
 EasyReadSkill-windows-x64.zip
@@ -42,23 +62,8 @@ EasyReadSkill-windows-x64.zip
 ```text
 EasyReadSkill.exe
 ```
-
-程序自带精简运行时，无需本机安装 Java。
-
-### 方式二：运行完整依赖 Jar
-
-[**前往 Releases 页面下载**](https://github.com/vhoom/EasyReadSkill/releases/latest)：
-
-```text
-EasyReadSkill.jar
-```
-
-确保本机已安装 **Java 17+**，然后在 Jar 所在目录打开终端运行：
-
-```powershell
-java -jar EasyReadSkill.jar
-```
 ---
+
 ## 快速使用
 
 ### 1. 配置 API
@@ -68,13 +73,6 @@ java -jar EasyReadSkill.jar
 ```text
 API 配置
 ```
-
-选择提供商：
-
-- 百度翻译
-- 有道智云
-
-然后选择服务类型，前往对应平台登陆注册都会送额度.并填写对应配置。
 
 ### 2. 添加扫描路径
 
