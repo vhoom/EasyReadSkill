@@ -1,0 +1,110 @@
+目前可以通过 API 接入并使用模型。以下是 OpenAPI/OpenAI 兼容格式的接入说明及常见模型列表：
+
+---
+
+## 一、 API 接入说明
+
+接口完全兼容 **OpenAI SDK** 及标准 HTTP 调用方式，只需替换 `base_url` 与 `api_key` 即可快速集成。
+
+### 1. 基础配置参数
+
+* **Base URL**: `[https://generativelanguage.googleapis.com/v1beta/openai/](https://generativelanguage.googleapis.com/v1beta/openai/)`
+* **API Key**: 需在 Google AI Studio 中申请并配置
+* **认证方式**: Bearer Token Authorization 或通过 URL 参数传递
+
+---
+
+### 2. 代码集成示例
+
+#### Python (标准 `openai` SDK)
+
+```python
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ.get("GEMINI_API_KEY"),
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+response = client.chat.completions.create(
+    model="gemini-2.5-flash",
+    messages=[
+        {"role": "system", "content": "你是一个严谨且乐于助人的 AI 助手。"},
+        {"role": "user", "content": "你好，请简要介绍一下你自己。"}
+    ],
+    temperature=0.7,
+)
+
+print(response.choices[0].message.content)
+
+```
+
+#### Node.js / TypeScript (标准 `openai` SDK)
+
+```typescript
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+});
+
+async function main() {
+  const completion = await openai.chat.completions.create({
+    messages: [{ role: 'user', content: 'Hello!' }],
+    model: 'gemini-2.5-flash',
+  });
+
+  console.log(completion.choices[0].message.content);
+}
+
+main();
+
+```
+
+#### cURL 命令 (REST API)
+
+```bash
+curl https://generativelanguage.googleapis.com/v1beta/openai/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $GEMINI_API_KEY" \
+  -d '{
+    "model": "gemini-2.5-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello!"
+      }
+    ]
+  }'
+
+```
+
+---
+
+## 二、 常用模型列表 (Model List)
+
+在请求体的 `model` 字段中填写以下模型标识符（Model ID）：
+
+| 模型名称 (Model ID) | 适用场景 / 特点 | 上下文窗口 (Context Window) |
+| --- | --- | --- |
+| **`gemini-2.5-flash`** | **默认推荐**。适用于轻量、快速、高性价比的通用任务、实时对话和轻量级推理。 | 1,000,000 tokens |
+| **`gemini-2.5-pro`** | **强力推理**。适用于复杂代码生成、深度推理、长文本分析及复杂逻辑处理。 | 2,000,000 tokens |
+| **`gemini-2.0-flash`** | 上一代 Flash 模型，保持极高的响应速度与性价比。 | 1,000,000 tokens |
+| **`gemini-1.5-pro`** | 经典长上下文模型，适合长文档处理与大文本分析。 | 2,000,000 tokens |
+| **`gemini-1.5-flash`** | 经典轻量化模型，适合高并发、低延迟场景。 | 1,000,000 tokens |
+
+---
+
+## 三、 支持的标准 API 端点
+
+通过 OpenAI 兼容层，支持以下核心 Endpoint：
+
+1. **对话补全 (Chat Completions)**: `/chat/completions`
+* 支持 `stream: true` 文本流式返回。
+* 支持 `system` 角色设定、`temperature`、`top_p` 等常规控制参数。
+
+
+2. **模型查询 (Models List)**: `/models`
+* 可通过 GET 请求动态获取当前可用模型列表。

@@ -1,0 +1,963 @@
+下面给你一份可以直接保存为 `openai-api.md` 的 Markdown 文档。内容按“**接入 → API Key → 模型列表 → 选择模型 → 调用模型 → JavaScript/Java → 常见问题**”组织。当前 OpenAI 官方文档推荐使用 **Responses API**，而模型列表通过 `GET /v1/models` 获取。([OpenAI Platform][1])
+
+# OpenAI API 接入与模型列表使用指南
+
+> 本文介绍如何接入 OpenAI API，以及如何通过 API 获取、筛选和使用模型列表。
+>
+> 当前推荐使用 **Responses API** 进行模型调用。
+
+---
+
+## 1. OpenAI API 的基本结构
+
+OpenAI API 的基本调用流程：
+
+```text
+你的程序
+   │
+   │ HTTPS + API Key
+   ▼
+OpenAI API
+   │
+   ├── /v1/models
+   │       获取模型列表
+   │
+   └── /v1/responses
+           调用模型
+               │
+               ▼
+          返回模型结果
+```
+
+最核心的两个接口：
+
+| 接口              | 方法   | 用途                   |
+| --------------- | ---- | -------------------- |
+| `/v1/models`    | GET  | 获取当前 API Key 可以使用的模型 |
+| `/v1/responses` | POST | 调用指定模型               |
+
+OpenAI 官方的 Models API 提供模型列表以及模型的基本信息，例如 `id`、`created` 和 `owned_by`。([OpenAI Platform][1])
+
+---
+
+# 2. API Key
+
+OpenAI API 使用 API Key 进行身份认证。
+
+请求时：
+
+```http
+Authorization: Bearer OPENAI_API_KEY
+```
+
+例如：
+
+```http
+Authorization: Bearer sk-xxxxxxxx
+```
+
+> ⚠️ API Key 是秘密凭证，不应该写进前端 Vue/React 页面，也不要提交到 GitHub。
+>
+> 推荐放到服务器环境变量或者密钥管理系统中。
+
+官方文档也明确建议不要把 API Key 暴露在浏览器端或客户端代码中。([OpenAI Platform][2])
+
+---
+
+# 3. 配置 API Key
+
+## Linux / macOS
+
+```bash
+export OPENAI_API_KEY="你的API_KEY"
+```
+
+例如：
+
+```bash
+export OPENAI_API_KEY="sk-xxxxxxxxxxxxxxxx"
+```
+
+---
+
+## Windows CMD
+
+```cmd
+set OPENAI_API_KEY=你的API_KEY
+```
+
+---
+
+## Windows PowerShell
+
+```powershell
+$env:OPENAI_API_KEY="你的API_KEY"
+```
+
+---
+
+# 4. 最简单的 API 测试
+
+使用 `curl`：
+
+```bash
+curl https://api.openai.com/v1/models \
+  -H "Authorization: Bearer $OPENAI_API_KEY"
+```
+
+如果 API Key 正常，会返回类似：
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "gpt-5.6-luna",
+      "object": "model",
+      "created": 1760000000,
+      "owned_by": "openai"
+    }
+  ]
+}
+```
+
+实际返回的模型数量和模型 ID 会随着账号权限以及 OpenAI 模型目录变化，因此**不要把模型列表硬编码成永久不变的列表**。
+
+---
+
+# 5. 获取模型列表
+
+## 5.1 请求
+
+```http
+GET https://api.openai.com/v1/models
+```
+
+请求头：
+
+```http
+Authorization: Bearer $OPENAI_API_KEY
+```
+
+完整 curl：
+
+```bash
+curl https://api.openai.com/v1/models \
+  -H "Authorization: Bearer $OPENAI_API_KEY"
+```
+
+---
+
+# 6. 模型列表返回结构
+
+典型结构：
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "model-id-0",
+      "object": "model",
+      "created": 1686935002,
+      "owned_by": "openai"
+    },
+    {
+      "id": "model-id-1",
+      "object": "model",
+      "created": 1686935002,
+      "owned_by": "openai"
+    }
+  ]
+}
+```
+
+其中：
+
+```text
+data
+ │
+ ├── [0]
+ │     ├── id
+ │     ├── object
+ │     ├── created
+ │     └── owned_by
+ │
+ ├── [1]
+ │
+ └── ...
+```
+
+最重要的字段是：
+
+```json
+"id": "模型ID"
+```
+
+因为调用模型时需要把这个 ID 传给 `model`。
+
+---
+
+# 7. 模型 ID 是怎么使用的？
+
+例如模型列表返回：
+
+```json
+{
+  "id": "gpt-5.6-luna"
+}
+```
+
+那么调用模型时：
+
+```json
+{
+  "model": "gpt-5.6-luna"
+}
+```
+
+也就是说：
+
+```text
+/v1/models
+      │
+      │ 获取
+      ▼
+"gpt-5.6-luna"
+      │
+      │ 作为 model 参数
+      ▼
+/v1/responses
+```
+
+---
+
+# 8. 调用 Responses API
+
+最基本的请求：
+
+```bash
+curl https://api.openai.com/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -d '{
+    "model": "gpt-5.6-luna",
+    "input": "你好，请介绍一下自己"
+  }'
+```
+
+核心参数：
+
+```json
+{
+  "model": "模型ID",
+  "input": "用户输入"
+}
+```
+
+官方 Quickstart 目前也是通过 `responses.create()` 调用模型。([OpenAI Platform][3])
+
+---
+
+# 9. JavaScript / Node.js 接入
+
+## 9.1 安装 SDK
+
+```bash
+npm install openai
+```
+
+---
+
+## 9.2 最简单的调用
+
+```javascript
+import OpenAI from "openai";
+
+const client = new OpenAI();
+
+const response = await client.responses.create({
+    model: "gpt-5.6-luna",
+    input: "你好，请介绍一下自己"
+});
+
+console.log(response.output_text);
+```
+
+官方 SDK 会读取：
+
+```text
+OPENAI_API_KEY
+```
+
+环境变量。([OpenAI Platform][3])
+
+---
+
+# 10. JavaScript 获取模型列表
+
+可以直接请求 Models API：
+
+```javascript
+import OpenAI from "openai";
+
+const client = new OpenAI();
+
+const models = await client.models.list();
+
+for (const model of models.data) {
+    console.log(model.id);
+}
+```
+
+输出可能类似：
+
+```text
+gpt-5.6-luna
+gpt-5.6-terra
+gpt-5.6-sol
+...
+```
+
+---
+
+# 11. 根据模型 ID 获取单个模型
+
+除了：
+
+```http
+GET /v1/models
+```
+
+还可以：
+
+```http
+GET /v1/models/{model}
+```
+
+例如：
+
+```bash
+curl https://api.openai.com/v1/models/gpt-5.6-luna \
+  -H "Authorization: Bearer $OPENAI_API_KEY"
+```
+
+返回：
+
+```json
+{
+  "id": "gpt-5.6-luna",
+  "object": "model",
+  "created": 1686935002,
+  "owned_by": "openai"
+}
+```
+
+官方 API Reference 提供了 `GET /v1/models/{model}` 用于查询指定模型。([OpenAI Platform][1])
+
+---
+
+# 12. 模型列表不要等同于“所有模型都适合文本聊天”
+
+这是使用模型列表时非常重要的一点。
+
+`/v1/models` 的作用主要是：
+
+```text
+告诉你：
+有哪些模型可以被你的 API 项目访问
+```
+
+但它不是：
+
+```text
+告诉你：
+所有模型都支持完全相同的功能
+```
+
+例如 OpenAI 有不同用途的模型：
+
+```text
+通用模型
+│
+├── 文本 / 推理
+│
+├── 图像
+│
+├── 音频
+│
+├── 实时语音
+│
+├── 转录
+│
+└── Embedding
+```
+
+因此：
+
+```text
+模型存在
+≠
+模型支持你想使用的全部 API 能力
+```
+
+选择模型时还应该查看对应模型的官方文档。
+
+---
+
+# 13. 当前模型体系的理解方式
+
+OpenAI 官方模型页面会按照用途展示模型，例如：
+
+```text
+Frontier models
+    ↓
+通用高能力模型
+
+Specialized models
+    ↓
+图像 / 音频 / 实时 / 转录等
+
+Embedding models
+    ↓
+向量化 / RAG / 搜索
+
+Open-weight models
+    ↓
+开放权重模型
+```
+
+模型目录会持续变化，因此实际项目中应该以当前官方模型页面和 `/v1/models` 返回结果为准。([OpenAI Platform][4])
+
+---
+
+# 14. 模型选择的基本思路
+
+不要简单写成：
+
+```text
+永远使用最贵模型
+```
+
+而应该按照任务选择：
+
+| 任务       | 考虑方向                |
+| -------- | ------------------- |
+| 普通文本生成   | 通用模型                |
+| 复杂推理     | 高能力推理模型             |
+| 编程       | 编程 / 推理能力强的模型       |
+| 大量简单请求   | 成本较低的模型             |
+| 图片生成     | 图像模型                |
+| 语音       | Audio / Realtime 模型 |
+| 语音转文字    | Transcription 模型    |
+| RAG 向量检索 | Embedding 模型        |
+
+例如官方模型页面当前将 GPT-5.6 Sol 定位为复杂推理和编程任务，将 GPT-5.6 Terra 定位为智能与成本之间的平衡，将 GPT-5.6 Luna 定位为成本敏感、高并发场景。具体模型和价格应以当前官方模型页面为准。([OpenAI Platform][4])
+
+---
+
+# 15. 在自己的项目中做“模型选择器”
+
+如果你正在开发一个 AI 管理后台，可以直接把：
+
+```http
+GET /v1/models
+```
+
+做成前端下拉框。
+
+例如：
+
+```text
+模型：
+┌──────────────────────────┐
+│ gpt-5.6-luna          ▼  │
+└──────────────────────────┘
+```
+
+后端获取：
+
+```javascript
+const models = await client.models.list();
+```
+
+然后：
+
+```javascript
+const modelList = models.data.map(model => ({
+    id: model.id,
+    name: model.id
+}));
+```
+
+前端：
+
+```vue
+<select v-model="selectedModel">
+    <option
+        v-for="model in modelList"
+        :key="model.id"
+        :value="model.id"
+    >
+        {{ model.id }}
+    </option>
+</select>
+```
+
+调用：
+
+```javascript
+const response = await client.responses.create({
+    model: selectedModel,
+    input: userInput
+});
+```
+
+这样就形成：
+
+```text
+OpenAI
+   │
+   │ /v1/models
+   ▼
+后端
+   │
+   │ 返回模型列表
+   ▼
+Vue 前端
+   │
+   │ 用户选择模型
+   ▼
+后端
+   │
+   │ /v1/responses
+   ▼
+OpenAI
+```
+
+---
+
+# 16. 不推荐让 Vue 前端直接调用 OpenAI
+
+不要这样：
+
+```text
+Vue
+ │
+ │ OPENAI_API_KEY
+ ▼
+OpenAI
+```
+
+因为 API Key 会暴露给用户。
+
+应该：
+
+```text
+Vue
+ │
+ │ 普通 HTTP 请求
+ ▼
+你的后端
+ │
+ │ OPENAI_API_KEY
+ ▼
+OpenAI
+```
+
+例如：
+
+```text
+Vue
+ │
+ │ POST /api/chat
+ ▼
+Java / Node.js 后端
+ │
+ │ Authorization: Bearer ...
+ ▼
+OpenAI
+```
+
+---
+
+# 17. 如果是 Java 后端
+
+Java 项目可以直接使用 HTTP 请求。
+
+请求：
+
+```http
+POST https://api.openai.com/v1/responses
+Content-Type: application/json
+Authorization: Bearer ${OPENAI_API_KEY}
+```
+
+Body：
+
+```json
+{
+  "model": "gpt-5.6-luna",
+  "input": "你好"
+}
+```
+
+Java 的基本逻辑：
+
+```java
+HttpClient client = HttpClient.newHttpClient();
+
+HttpRequest request = HttpRequest.newBuilder()
+        .uri(URI.create("https://api.openai.com/v1/responses"))
+        .header("Content-Type", "application/json")
+        .header("Authorization", "Bearer " + apiKey)
+        .POST(HttpRequest.BodyPublishers.ofString("""
+            {
+              "model": "gpt-5.6-luna",
+              "input": "你好"
+            }
+            """))
+        .build();
+
+HttpResponse<String> response =
+        client.send(request, HttpResponse.BodyHandlers.ofString());
+
+System.out.println(response.body());
+```
+
+---
+
+# 18. Java 后端封装成自己的接口
+
+如果你的项目是：
+
+```text
+Vue 3
+  ↓
+Spring Boot
+  ↓
+OpenAI API
+```
+
+可以设计：
+
+```http
+POST /api/ai/chat
+```
+
+请求：
+
+```json
+{
+  "model": "gpt-5.6-luna",
+  "message": "请解释一下什么是 Java Servlet"
+}
+```
+
+你的后端再转换成：
+
+```json
+{
+  "model": "gpt-5.6-luna",
+  "input": "请解释一下什么是 Java Servlet"
+}
+```
+
+发送到：
+
+```text
+https://api.openai.com/v1/responses
+```
+
+这样前端完全不知道：
+
+```text
+OPENAI_API_KEY
+```
+
+是什么。
+
+---
+
+# 19. 模型列表接口可以进一步封装
+
+你的后端可以提供：
+
+```http
+GET /api/ai/models
+```
+
+内部：
+
+```text
+GET https://api.openai.com/v1/models
+```
+
+然后返回给 Vue：
+
+```json
+[
+  {
+    "id": "gpt-5.6-luna"
+  },
+  {
+    "id": "gpt-5.6-terra"
+  },
+  {
+    "id": "gpt-5.6-sol"
+  }
+]
+```
+
+前端：
+
+```javascript
+const response = await axios.get("/api/ai/models");
+
+models.value = response.data;
+```
+
+最终页面：
+
+```text
+AI 模型
+────────────────────────
+
+○ gpt-5.6-luna
+
+○ gpt-5.6-terra
+
+○ gpt-5.6-sol
+
+────────────────────────
+
+[开始对话]
+```
+
+---
+
+# 20. 推荐的项目结构
+
+如果使用 Vue 3 + Java/Spring Boot：
+
+```text
+项目
+│
+├── frontend
+│   └── Vue 3
+│       ├── views
+│       │   └── AiChat.vue
+│       │
+│       ├── api
+│       │   └── ai.js
+│       │
+│       └── components
+│
+└── backend
+    └── Spring Boot
+        │
+        ├── controller
+        │   └── AiController.java
+        │
+        ├── service
+        │   └── AiService.java
+        │
+        ├── config
+        │   └── OpenAIConfig.java
+        │
+        └── dto
+            ├── ChatRequest.java
+            └── ModelResponse.java
+```
+
+---
+
+# 21. 最小可用版本
+
+如果只是想测试 API，不需要马上搭完整项目。
+
+### 第一步：获取模型
+
+```bash
+curl https://api.openai.com/v1/models \
+  -H "Authorization: Bearer $OPENAI_API_KEY"
+```
+
+### 第二步：选择模型
+
+```text
+model = 返回结果中的某个 id
+```
+
+### 第三步：调用
+
+```bash
+curl https://api.openai.com/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -d '{
+    "model": "你的模型ID",
+    "input": "你好"
+  }'
+```
+
+整个过程就是：
+
+```text
+API Key
+   ↓
+GET /v1/models
+   ↓
+得到 model id
+   ↓
+POST /v1/responses
+   ↓
+得到 AI 输出
+```
+
+---
+
+# 22. 流式输出
+
+如果你的聊天页面希望实现：
+
+```text
+AI：
+你好，我是……
+        ↓
+文字不断出现
+        ↓
+你好，我是一个……
+```
+
+可以使用 Responses API 的：
+
+```json
+{
+  "stream": true
+}
+```
+
+例如：
+
+```javascript
+const stream = await client.responses.create({
+    model: "gpt-5.6-luna",
+    input: "介绍一下 Java",
+    stream: true
+});
+
+for await (const event of stream) {
+    console.log(event);
+}
+```
+
+OpenAI API 使用 Server-Sent Events（SSE）发送流式事件。([OpenAI Platform][5])
+
+---
+
+# 23. 最重要的几个概念
+
+可以把 OpenAI API 理解成三个层次：
+
+```text
+                    OpenAI API
+                         │
+          ┌──────────────┴──────────────┐
+          │                             │
+     Models API                   Responses API
+     /v1/models                   /v1/responses
+          │                             │
+          ▼                             ▼
+     找模型                         用模型
+          │                             │
+          └──────────────┬──────────────┘
+                         ▼
+                    model: "xxx"
+```
+
+所以：
+
+```text
+/v1/models
+```
+
+解决：
+
+> “我有哪些模型可以使用？”
+
+而：
+
+```text
+/v1/responses
+```
+
+解决：
+
+> “我要让哪个模型处理什么内容？”
+
+---
+
+# 24. 官方文档
+
+OpenAI API Quickstart：
+
+[https://platform.openai.com/docs/quickstart/make-your-first-api-request](https://platform.openai.com/docs/quickstart/make-your-first-api-request)
+
+Models API：
+
+[https://platform.openai.com/docs/api-reference/models](https://platform.openai.com/docs/api-reference/models)
+
+Models：
+
+[https://platform.openai.com/docs/models](https://platform.openai.com/docs/models)
+
+API Reference：
+
+[https://platform.openai.com/docs/api-reference](https://platform.openai.com/docs/api-reference)
+
+---
+
+# 25. 一句话总结
+
+最核心的代码其实只有两步：
+
+```javascript
+// ① 获取模型
+const models = await client.models.list();
+
+// ② 使用某个模型
+const response = await client.responses.create({
+    model: "模型ID",
+    input: "你的问题"
+});
+```
+
+也就是：
+
+```text
+Models API = 找模型
+Responses API = 用模型
+```
+
+而实际项目推荐：
+
+```text
+Vue 3
+  ↓
+你的后端
+  ↓
+OpenAI API
+  ├── /v1/models
+  └── /v1/responses
+```
+
+这样 API Key 留在后端，前端只负责用户界面和交互。
+
+如果你是准备**做自己的 Vue + Java/Spring Boot AI 对话项目**，下一步最实用的是把这份文档继续扩展成一套完整的 **`Vue3 + Spring Boot + OpenAI Responses API` 实战代码**，包括模型下拉列表、聊天、流式输出、错误处理和 API Key 配置。
+
+[1]: https://platform.openai.com/docs/api-reference/models/object?lang=curl&utm_source=chatgpt.com "Models | OpenAI API Reference"
+[2]: https://platform.openai.com/docs/api-reference/backward-compatibility?lang=ruby&utm_source=chatgpt.com "API Reference - OpenAI API"
+[3]: https://platform.openai.com/docs/quickstart/make-your-first-api-request?utm_source=chatgpt.com "Developer quickstart - OpenAI API"
+[4]: https://platform.openai.com/docs/models/gpt-4-turbo-and-gpt-4?utm_source=chatgpt.com "Models | OpenAI API"
+[5]: https://platform.openai.com/docs/api-reference/responses-streaming?lang=python&utm_source=chatgpt.com "Streaming events | OpenAI API Reference"

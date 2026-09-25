@@ -1,0 +1,266 @@
+# Kimi OpenAPI 接入指南
+
+## 1. 概述
+
+Kimi 提供 OpenAI 兼容的 API 接口，你可以使用任何 OpenAI SDK 或 HTTP 客户端来调用 Kimi 模型。
+
+**API Base URL:**
+```
+https://api.moonshot.cn/v1
+```
+
+---
+
+## 2. 认证方式
+
+所有请求需要在 HTTP Header 中携带 API Key：
+
+```http
+Authorization: Bearer YOUR_API_KEY
+```
+
+> 你可以在 [Kimi 开放平台](https://platform.moonshot.cn/) 申请 API Key。
+
+---
+
+## 3. 模型列表
+
+### 获取模型列表（API 方式）
+
+```bash
+curl https://api.moonshot.cn/v1/models \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### 当前可用模型
+
+| 模型名称 | 说明 |
+|---------|------|
+| `kimi-k2-0905-preview` | Kimi K2 最新预览版（推荐） |
+| `kimi-k2-turbo-preview` | Kimi K2 Turbo 预览版（更快） |
+| `moonshot-v1-8k` | 支持 8K 上下文 |
+| `moonshot-v1-32k` | 支持 32K 上下文 |
+| `moonshot-v1-128k` | 支持 128K 上下文 |
+
+> 模型列表会不定期更新，建议通过 `/v1/models` 接口获取最新列表。
+
+---
+
+## 4. 聊天补全接口（Chat Completions）
+
+### 4.1 基础调用
+
+**Endpoint:** `POST /v1/chat/completions`
+
+```bash
+curl https://api.moonshot.cn/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "kimi-k2-0905-preview",
+    "messages": [
+      {"role": "system", "content": "你是 Kimi，一个有帮助的 AI 助手。"},
+      {"role": "user", "content": "你好，请介绍一下你自己。"}
+    ],
+    "temperature": 0.6,
+    "stream": false
+  }'
+```
+
+### 4.2 请求参数说明
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `model` | string | ✅ | 模型名称 |
+| `messages` | array | ✅ | 消息列表 |
+| `temperature` | float | ❌ | 采样温度（0~1，默认 0.6） |
+| `top_p` | float | ❌ | 核采样参数 |
+| `n` | integer | ❌ | 生成回复数量（默认 1） |
+| `stream` | boolean | ❌ | 是否流式输出（默认 false） |
+| `max_tokens` | integer | ❌ | 最大生成 token 数 |
+| `presence_penalty` | float | ❌ | 存在惩罚 |
+| `frequency_penalty` | float | ❌ | 频率惩罚 |
+
+### 4.3 流式输出（SSE）
+
+```bash
+curl https://api.moonshot.cn/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "kimi-k2-0905-preview",
+    "messages": [
+      {"role": "user", "content": "讲一个短故事"}
+    ],
+    "stream": true
+  }'
+```
+
+---
+
+## 5. Python SDK 示例
+
+### 5.1 安装
+
+```bash
+pip install openai
+```
+
+### 5.2 基础对话
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="YOUR_API_KEY",
+    base_url="https://api.moonshot.cn/v1"
+)
+
+completion = client.chat.completions.create(
+    model="kimi-k2-0905-preview",
+    messages=[
+        {"role": "system", "content": "你是 Kimi，一个有帮助的 AI 助手。"},
+        {"role": "user", "content": "你好"}
+    ],
+    temperature=0.6,
+)
+
+print(completion.choices[0].message.content)
+```
+
+### 5.3 流式输出
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="YOUR_API_KEY",
+    base_url="https://api.moonshot.cn/v1"
+)
+
+stream = client.chat.completions.create(
+    model="kimi-k2-0905-preview",
+    messages=[
+        {"role": "user", "content": "讲一个短故事"}
+    ],
+    stream=True,
+)
+
+for chunk in stream:
+    delta = chunk.choices[0].delta
+    if delta.content:
+        print(delta.content, end="", flush=True)
+```
+
+### 5.4 获取模型列表
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="YOUR_API_KEY",
+    base_url="https://api.moonshot.cn/v1"
+)
+
+models = client.models.list()
+for model in models.data:
+    print(model.id)
+```
+
+---
+
+## 6. 多轮对话示例
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="YOUR_API_KEY",
+    base_url="https://api.moonshot.cn/v1"
+)
+
+messages = [
+    {"role": "system", "content": "你是 Kimi，一个有帮助的 AI 助手。"},
+    {"role": "user", "content": "中国的首都是哪里？"},
+    {"role": "assistant", "content": "中国的首都是北京。"},
+    {"role": "user", "content": "那它的人口大约是多少？"},
+]
+
+completion = client.chat.completions.create(
+    model="kimi-k2-0905-preview",
+    messages=messages,
+    temperature=0.6,
+)
+
+print(completion.choices[0].message.content)
+```
+
+---
+
+## 7. 响应格式
+
+```json
+{
+  "id": "chatcmpl-xxx",
+  "object": "chat.completion",
+  "created": 1690000000,
+  "model": "kimi-k2-0905-preview",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "你好！我是 Kimi..."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 20,
+    "completion_tokens": 50,
+    "total_tokens": 70
+  }
+}
+```
+
+---
+
+## 8. 错误处理
+
+| HTTP 状态码 | 说明 |
+|------------|------|
+| `400` | 请求参数错误 |
+| `401` | API Key 无效或缺失 |
+| `403` | 权限不足 |
+| `404` | 模型不存在 |
+| `429` | 请求频率超限 |
+| `500` | 服务器内部错误 |
+
+```python
+from openai import OpenAI, AuthenticationError, RateLimitError
+
+client = OpenAI(
+    api_key="YOUR_API_KEY",
+    base_url="https://api.moonshot.cn/v1"
+)
+
+try:
+    completion = client.chat.completions.create(...)
+except AuthenticationError:
+    print("API Key 无效")
+except RateLimitError:
+    print("请求频率超限，请稍后重试")
+```
+
+---
+
+## 9. 注意事项
+
+1. **API Key 安全**：不要将 API Key 硬编码在前端代码或公开仓库中
+2. **频率限制**：不同模型有不同的 RPM（每分钟请求数）限制
+3. **计费方式**：按 token 数量计费，具体价格请参考[官方定价页](https://platform.moonshot.cn/docs/pricing)
+4. **上下文长度**：不同模型支持的上下文长度不同，请根据需求选择
+
+---
+
+如需更多帮助，请参考 [Kimi 开放平台官方文档](https://platform.moonshot.cn/docs/)。

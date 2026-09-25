@@ -1,0 +1,77 @@
+千问（Qwen）大模型主要通过阿里云百炼平台提供 OpenAI 兼容接口。只需调整 API Key、BASE_URL 和模型名称，即可将原有的 OpenAI 代码迁移使用。
+
+OpenAPI 接入指南
+
+接入流程包含账号准备、密钥获取、环境配置及代码调用四个步骤。
+
+账号与密钥准备
+注册阿里云账号并完成实名认证，登录百炼控制台开通服务。
+在“API-KEY管理”页面创建 API Key（以 sk- 开头），该 Key 仅显示一次，需立即保存。
+
+环境变量配置
+建议将 API Key 配置为环境变量 DASHSCOPE_API_KEY，避免代码硬编码导致泄露风险。
+
+Linux/macOS:
+        export DASHSCOPE_API_KEY="sk-your-api-key-here"
+    
+Windows: 通过系统属性或 setx 命令配置。
+
+接口地址（Base URL）
+OpenAI 兼容接口的 Base URL 因地域而异（其中 {WorkspaceId} 需替换为业务空间 ID，弗吉尼亚地域除外）：
+地域   Base URL (SDK 使用)
+北京   https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+
+新加坡   https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1
+
+美国弗吉尼亚   https://dashscope-us.aliyuncs.com/compatible-mode/v1
+
+代码调用示例（Python）
+安装 OpenAI SDK (pip install openai) 后，参考以下代码：
+
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.getenv("DASHSCOPE_API_KEY"),
+    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1" # 此处以默认地址为例，请按地域替换
+)
+
+completion = client.chat.completions.create(
+    model="qwen-plus", # 替换为你想使用的模型名称
+    messages=[{"role": "user", "content": "你好"}]
+)
+
+print(completion.choices[0].message.content)
+
+千问模型列表
+
+截至 2026 年 9 月，千问系列大模型涵盖了文本、多模态、代码、数学等多个领域。以下是主要模型分类列表：
+
+📝 通用文本与多模态大模型
+Qwen3.8-Max：旗舰级模型，2.4万亿参数 MoE 架构，支持 100 万 Token 上下文与混合思考模式。
+Qwen3.7-Max / Plus / Flash：分别适用于复杂推理、多模态智能体及强化多模态理解场景。
+Qwen-Long：超长文本专用模型，支持千万级 Token 上下文。
+Qwen-Plus-Character：角色扮演模型，优化人设指令遵循与共情能力。
+开源版本：包括 Qwen3.8-2.4T-A95B、Qwen3-32B、Qwen3-Next-80B-A3B 等。
+
+👁️ 多模态与视觉模型
+Qwen3.5-Omni 系列：全模态大模型，支持文本、图片、音频、视频的理解与交互。
+Qwen3-VL-Plus：视觉语言模型，升级了视觉 Coding 和空间感知能力。
+Qwen3.5-OCR：文字提取模型，支持 128K 上下文。
+
+💻 代码与数学专项模型
+Qwen3-Coder 系列：具备 Coding Agent 能力，支持自主编程与工具调用。
+Qwen-Math：数学推理模型，提供分步解题过程。
+
+🎨 图像、视频与语音模型
+图像生成：Qwen-Image-3.0-Pro（支持复杂版面及小字渲染）、Wan2.7-Image。
+视频生成（万相 Wan 系列）：Wan3.0-Video（All-in-One 视频生成）、Wan2.7-T2V（文生视频）。
+语音音频：Qwen-Audio-3.0（端到端实时语音）、Qwen3-TTS-Flash（语音合成）。
+
+🧩 向量与行业应用模型
+Qwen3.7-Text-Embedding：多语言文本统一向量模型。
+垂直行业：通义法睿（法律）、通义晓蜜（智能客服）、通义智文（文献阅读）、通义点金（金融）。
+
+注意：Qwen-Audio 仅支持 DashScope 协议，不支持 OpenAI 兼容接口。
+
+需要我补充流式调用（SSE）和常见错误码处理的示例吗？
