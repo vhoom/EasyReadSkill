@@ -11,12 +11,16 @@ import com.song.config.YoudaoConfig;
 import com.song.model.ProviderType;
 import com.song.model.ProviderVendor;
 import com.song.service.HttpCalls;
+import com.song.service.TranslationErrorMessages;
 import com.song.service.TranslationResult;
 import com.translator.api.TranslateRequest;
 import com.translator.bootstrap.TranslatorBootstrap;
 import com.translator.facade.TranslateService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.InterruptedIOException;
+import java.util.List;
 
 /**
  * 将主应用的 ProviderType 委托给 translate 模块（百度/有道）或 com.llm 门面。
@@ -36,6 +40,35 @@ final class TranslatorBackedProvider implements TranslationProvider {
         return type;
     }
 
+    /** 大模型能一次吃下整篇描述，不必按 NMT 的 1800 字切段。 */
+    @Override
+    public int maxChunkLength() {
+        return type.getVendor().isLlm() ? 8000 : 1800;
+    }
+
+    /** 大模型允许一次翻多段（拼成一次对话，再按标记拆回）；百度/有道逐段。 */
+    @Override
+    public int maxBatchItems() {
+        return type.getVendor().isLlm() ? 5 : 1;
+    }
+
+    @Override
+    public int maxBatchChars() {
+        return type.getVendor().isLlm() ? 6000 : 0;
+    }
+
+    @Override
+    public List<String> translateBatch(List<String> texts, String from, String to, AppConfig config) {
+        if (!type.getVendor().isLlm()) {
+            return TranslationProvider.super.translateBatch(texts, from, to, config);
+        }
+        if (HttpCalls.isCancelled()) {
+            throw new IllegalStateException("已中断", new InterruptedIOException("已中断"));
+        }
+        return llmFacade(config).translateBatch(null, texts, from, to,
+                config.getLlmSlot(type.getVendor()).getPrompt());
+    }
+
     @Override
     public TranslationResult translate(String text, String from, String to, AppConfig config) {
         if (HttpCalls.isCancelled()) {
@@ -52,12 +85,19 @@ final class TranslatorBackedProvider implements TranslationProvider {
                 return TranslationResult.interrupted();
             }
             LOG.error("{} 翻译失败", type.getDisplayName(), e);
-            return TranslationResult.failure(e.getMessage() == null
-                    ? type.getDisplayName() + "失败" : e.getMessage());
+            String message = e.getMessage() == null
+                    ? type.getDisplayName() + "失败" : e.getMessage();
+            return TranslationResult.failure(TranslationErrorMessages.explain(message));
         }
     }
 
     private String llmTranslate(String text, String from, String to, AppConfig config) {
+        return llmFacade(config).translate(null, text, from, to,
+                config.getLlmSlot(type.getVendor()).getPrompt());
+    }
+
+    /** 用当前配置构造大模型门面（密钥取自配置，缺则回退环境变量）。 */
+    private LlmFacade llmFacade(AppConfig config) {
         ProviderVendor vendor = type.getVendor();
         LlmVendor llmVendor = LlmConfigs.toLlmVendor(vendor);
         LlmSlotConfig slot = config.getLlmSlot(vendor);
@@ -79,8 +119,7 @@ final class TranslatorBackedProvider implements TranslationProvider {
                 slot.resolveBaseUrl(llmVendor),
                 apiKey,
                 slot.resolveModel(llmVendor));
-        return LlmFacade.of(llmConfig).translate(
-                null, text, from, to, slot.getPrompt());
+        return LlmFacade.of(llmConfig);
     }
 
     private String invoke(TranslateService service, String text, String from, String to,

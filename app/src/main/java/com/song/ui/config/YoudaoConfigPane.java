@@ -127,15 +127,12 @@ public class YoudaoConfigPane extends GridPane {
     }
 
     /**
-     * 仅写入应用密钥并切换到有道厂商。
+     * 仅写入应用密钥（失焦即生效）。
+     * 不切换当前生效的提供商，避免"只是填个密钥"就把正在用的翻译服务换掉。
      *
      * @param config 应用配置
      */
     public void saveSecretsOnly(AppConfig config) {
-        config.setVendor(ProviderVendor.YOUDAO);
-        if (serviceBox.getValue() != null) {
-            config.setProvider(serviceBox.getValue());
-        }
         config.getYoudaoConfig().setSecretKey(secretKeyField.getPlain());
     }
 

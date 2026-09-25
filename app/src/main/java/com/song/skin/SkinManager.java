@@ -165,6 +165,9 @@ public final class SkinManager {
             if (underStyleClass(node, "list-cell")) continue;
             if (labeled.getStyleClass().contains("filter-tab") && labeled instanceof RadioButton tab) {
                 paintFilterTab(tab, text, secondary);
+            } else if (labeled.getStyleClass().contains("tag-warn")) {
+                // 非外部 skill 标记：保留警示色，不被通用文字色覆盖
+                labeled.setTextFill(Color.web(tokens.warning()));
             } else if (labeled.getStyleClass().contains("secondary")
                     || labeled.getStyleClass().contains("eyebrow")) {
                 labeled.setTextFill(secondary);

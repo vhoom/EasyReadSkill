@@ -350,6 +350,16 @@ public class CssBuilder {
                                 .append("    -fx-padding: 1;\n")
                                 .append("}\n");
 
+                css.append(".tag-warn {\n")
+                                .append("    -fx-background-color: ").append(t.surfaceAlt()).append(";\n")
+                                .append("    -fx-text-fill: ").append(t.warning()).append(";\n")
+                                .append("    -fx-border-color: ").append(t.warning()).append(";\n")
+                                .append("    -fx-border-width: 1;\n")
+                                .append("    -fx-border-radius: 999;\n")
+                                .append("    -fx-background-radius: 999;\n")
+                                .append("    -fx-padding: 0 6 0 6;\n")
+                                .append("    -fx-font-size: 10px;\n")
+                                .append("}\n");
                 css.append(".tooltip {\n")
                                 .append("    -fx-background-color: ").append(t.surface()).append(";\n")
                                 .append("    -fx-text-fill: ").append(t.text()).append(";\n")
