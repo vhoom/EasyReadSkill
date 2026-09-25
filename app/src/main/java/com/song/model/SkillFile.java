@@ -10,6 +10,8 @@ public class SkillFile {
     private final StringProperty originalDescription = new SimpleStringProperty();
     private final StringProperty translatedDescription = new SimpleStringProperty();
     private final BooleanProperty selected = new SimpleBooleanProperty(false);
+    /** 是否按"skills 目录 / 扫描根下二级目录"规则匹配到的外部 skill。 */
+    private boolean external = true;
 
     public SkillFile() {}
 
@@ -39,4 +41,7 @@ public class SkillFile {
     public boolean isSelected() { return selected.get(); }
     public void setSelected(boolean v) { selected.set(v); }
     public BooleanProperty selectedProperty() { return selected; }
+
+    public boolean isExternal() { return external; }
+    public void setExternal(boolean external) { this.external = external; }
 }

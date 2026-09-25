@@ -9,7 +9,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class AppConfig {
+
+    /** 配置结构版本：老配置没有该字段，加载时迁移并补写。 */
+    public static final int SCHEMA_VERSION = 2;
+
+    private Integer schemaVersion;
+
     private List<ScanPath> scanPaths = new ArrayList<>();
+
+    /**
+     * 扫描路径是否已初始化。默认 true：老配置没有该字段时也视为已初始化，
+     * 这样"用户主动清空扫描路径"不会被当成首次安装又把默认目录补回来。
+     */
+    private boolean scanPathsInitialized = true;
+
+    /** 失效记录是否已归档（一次性维护动作）。 */
+    private boolean recordsArchived;
     private ProviderVendor vendor = ProviderVendor.BAIDU;
     private ProviderType provider = ProviderType.getDefault();
 
@@ -42,16 +57,26 @@ public class AppConfig {
     private String prompt;
 
     public AppConfig() {
-        ensureDefaultScanPaths();
+        fillDefaultScanPaths();
     }
 
     /**
-     * 仅在扫描路径为空时填入默认目录，避免每次加载配置都追加三十多条。
+     * 仅在"尚未初始化"时填入默认目录。
+     * 首次创建的配置由构造函数直接填好；用户清空后不会再被补回来。
      */
     public void ensureDefaultScanPaths() {
         if (scanPaths == null) scanPaths = new ArrayList<>();
-        if (!scanPaths.isEmpty()) return;
+        if (scanPathsInitialized) return;
+        fillDefaultScanPaths();
+    }
 
+    /** 填入默认扫描目录（首次安装用），列表非空时不动。 */
+    public void fillDefaultScanPaths() {
+        if (scanPaths == null) scanPaths = new ArrayList<>();
+        if (!scanPaths.isEmpty()) {
+            scanPathsInitialized = true;
+            return;
+        }
         String home = System.getProperty("user.home");
         String[] names = {
                 ".agents", ".claude", ".codex", ".gemini", ".copilot",
@@ -65,6 +90,7 @@ public class AppConfig {
         for (String name : names) {
             scanPaths.add(new ScanPath(Paths.get(home, name).toString(), false));
         }
+        scanPathsInitialized = true;
     }
 
     public ProviderVendor getVendor() {
@@ -227,6 +253,61 @@ public class AppConfig {
 
     public boolean isWindowMaximized() { return windowMaximized; }
     public void setWindowMaximized(boolean windowMaximized) { this.windowMaximized = windowMaximized; }
+
+    /** @return 配置结构版本；老配置为 null */
+    public Integer getSchemaVersion() { return schemaVersion; }
+    public void setSchemaVersion(Integer schemaVersion) { this.schemaVersion = schemaVersion; }
+
+    public boolean isScanPathsInitialized() { return scanPathsInitialized; }
+    public void setScanPathsInitialized(boolean scanPathsInitialized) {
+        this.scanPathsInitialized = scanPathsInitialized;
+    }
+
+    /** @return 失效记录是否已归档过 */
+    public boolean isRecordsArchived() { return recordsArchived; }
+    public void setRecordsArchived(boolean recordsArchived) { this.recordsArchived = recordsArchived; }
+
+    /** 加载时的密钥快照，用来判断"本进程是否动过密钥"。 */
+    private transient String secretsAtLoad;
+
+    /** 记下当前密钥快照（加载完成后调用）。 */
+    public void markSecretsLoaded() {
+        this.secretsAtLoad = secretsFingerprint();
+    }
+
+    /**
+     * 本进程是否改过密钥。没改过时写盘会采用磁盘上的最新密钥，
+     * 避免 app 与 translate 模块（自带测试程序）两个写入者互相覆盖。
+     *
+     * @return true 表示本进程改过
+     */
+    public boolean secretsChangedSinceLoad() {
+        return secretsAtLoad == null || !secretsAtLoad.equals(secretsFingerprint());
+    }
+
+    /**
+     * 密钥相关字段的稳定指纹（不依赖 Gson 序列化细节）。
+     *
+     * @return 指纹字符串
+     */
+    public String secretsFingerprint() {
+        StringBuilder sb = new StringBuilder(256);
+        BaiduConfig b = getBaiduConfig();
+        sb.append(b.getAppId()).append('|').append(b.getApiKey()).append('|')
+                .append(b.getSecretKey()).append('|').append(b.getDomain());
+        YoudaoConfig y = getYoudaoConfig();
+        sb.append('#').append(y.getAppId()).append('|').append(y.getSecretKey())
+                .append('|').append(y.getDomain()).append('|').append(y.getHandleOption());
+        for (ProviderVendor v : ProviderVendor.values()) {
+            sb.append('#');
+            LlmSlotConfig slot = getLlmSlot(v);
+            if (slot != null) {
+                sb.append(slot.getApiKey()).append('|')
+                        .append(slot.getBaseUrl()).append('|').append(slot.getModel());
+            }
+        }
+        return sb.toString();
+    }
 
     /** 将旧版 config.json 中的扁平字段迁移到各自 provider 配置。 */
     public void migrateLegacy() {

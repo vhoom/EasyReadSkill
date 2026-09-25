@@ -16,5 +16,7 @@ public class MainView extends BorderPane {
         setCenter(split);
 
         state.loadFromRecords();
+        // 启动后核对文件实际内容，纠正记录里过期的状态（后台执行，不挡界面）
+        state.startStatusVerification();
     }
 }

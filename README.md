@@ -1,5 +1,5 @@
 # EasyReadSkill
-EasyReadSkill 是一个基于 JavaFX 的技能说明翻译工具。它只扫描文件名恰好为 `SKILL.md` 的最外层技能目录，提取 frontmatter 里的 `Description`，调用翻译服务后写回文件。子目录里的 `skill.md` 或另一份 `SKILL.md` 不会被当成独立技能。
+EasyReadSkill 是一个基于 JavaFX 的skill description说明翻译工具。它通过规则匹配SKILL.md的description,调用翻译服务进行翻译操作
 
 支持提供商：
 
@@ -9,22 +9,7 @@ EasyReadSkill 是一个基于 JavaFX 的技能说明翻译工具。它只扫描�
 
 ---
 
-## 功能特性
-
-- 只扫描最外层、文件名恰好为 `SKILL.md` 的技能目录
-- 首次自动备份原始 Description
-- 支持批量翻译、勾选翻译、停止翻译
-- 支持还原原始备份、重新备份
-- 支持翻译记忆，避免同一原文重复请求 API
-- 支持翻译失败弹窗，并展示 API 文档错误说明
-- 顶部筛选显示数量
-- 支持全选、反选、取消选择
-- 双击列表文件打开所在目录
-- 换肤与对话框有轻量淡入
-- 顶栏可改源语言和目标语言
-- 支持 Windows 原生标题栏深色主题
-- 日志输出到 `~/.easyReadSkill/logs`
-
+ 
 ---
 
 ## 运行
@@ -124,14 +109,4 @@ Windows 下通常是：
 ```text
 C:\Users\你的用户名\.easyReadSkill\
 ```
-
-目录结构：
-
-```text
-.easyReadSkill/
- config.json          API 配置
- records.json         备份记录与翻译记忆
- logs/                运行日志
- skin/                自动生成的皮肤 CSS
-```
-
+ 

@@ -1,6 +1,7 @@
 package com.llm.facade;
 
 import com.llm.api.LlmConfig;
+import com.llm.api.LlmLanguages;
 import com.llm.api.LlmPrompts;
 import com.llm.api.LlmVendor;
 import com.llm.http.OpenAiCompatClient;
@@ -175,11 +176,36 @@ public final class LlmFacade {
         if (to == null || to.isBlank()) {
             throw new IllegalArgumentException("to 不能为空");
         }
-        String fromLabel = (from == null || from.isBlank() || "auto".equalsIgnoreCase(from))
-                ? "自动检测" : from;
-        String user = "请将下列文本从「" + fromLabel + "」翻译为「" + to + "」。\n\n" + text;
+        // 大模型看不懂 jp / kor / fra 这类厂商码，提示词里必须写自然语言名
+        String fromLabel = LlmLanguages.displayName(from);
+        String toLabel = LlmLanguages.displayName(to);
+        String user = "请将下列文本从「" + fromLabel + "」翻译为「" + toLabel + "」。\n\n" + text;
         String sys = (systemPrompt == null || systemPrompt.isBlank())
                 ? LlmPrompts.DEFAULT_TRANSLATE_SYSTEM : systemPrompt;
         return chat(model, sys, user);
+    }
+
+    /**
+     * 批量翻译：把多段文本拼进一次对话，再按标记拆回逐段译文。
+     *
+     * @param model        模型；空则默认
+     * @param texts        待翻译文本（至少两段）
+     * @param from         源语言
+     * @param to           目标语言
+     * @param userPrompt   用户自定义提示词；空则用默认
+     * @return 与入参等长的译文列表
+     * @throws IllegalStateException 拼装/拆解失败（调用方应回退到逐段翻译）
+     */
+    public List<String> translateBatch(String model, List<String> texts, String from, String to,
+                                       String userPrompt) {
+        if (!LlmBatch.packable(texts)) {
+            throw new IllegalArgumentException("不满足批量翻译条件");
+        }
+        String fromLabel = LlmLanguages.displayName(from);
+        String toLabel = LlmLanguages.displayName(to);
+        String user = "请把下面 " + texts.size() + " 段文本分别从「" + fromLabel
+                + "」翻译为「" + toLabel + "」。\n\n" + LlmBatch.pack(texts);
+        String reply = chat(model, LlmPrompts.batchSystem(userPrompt), user);
+        return LlmBatch.split(reply, texts.size());
     }
 }

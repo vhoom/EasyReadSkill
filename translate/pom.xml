@@ -45,7 +45,6 @@
                 <version>3.5.0</version>
                 <configuration>
                     <mainClass>com.llm.demo.ChatTranslateExample</mainClass>
-                    <addModules>java.net.http</addModules>
                 </configuration>
             </plugin>
             <plugin>
