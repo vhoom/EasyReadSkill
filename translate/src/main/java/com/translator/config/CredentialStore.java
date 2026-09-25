@@ -2,6 +2,7 @@ package com.translator.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.translator.config.StoredCredentials.BaiduSection;
@@ -72,8 +73,13 @@ public final class CredentialStore {
             root = new JsonObject();
         }
 
-        root.add("baidu", GSON.toJsonTree(creds.getBaidu()));
-        root.add("youdao", GSON.toJsonTree(creds.getYoudao()));
+        // 字段级合并：空白值不覆盖磁盘上已有的非空密钥，避免两个写入者互相清空
+        root.add("baidu", mergeSection(section(root, "baidu"),
+                GSON.toJsonTree(creds.getBaidu()),
+                "appId", "apiKey", "secretKey", "domain"));
+        root.add("youdao", mergeSection(section(root, "youdao"),
+                GSON.toJsonTree(creds.getYoudao()),
+                "appId", "secretKey", "domain", "handleOption", "prompt"));
 
         // 清掉已迁移的旧扁平字段，避免下次再覆盖
         root.remove("appId");
@@ -94,6 +100,43 @@ public final class CredentialStore {
         } catch (IOException atomicFailed) {
             Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
         }
+    }
+
+    /**
+     * 把新值合并进旧段：新值为空白而旧值非空时保留旧值。
+     *
+     * @param oldSection 磁盘上的旧段，可为 null
+     * @param newTree    待写入的新段
+     * @param fields     需要按此规则合并的字段名
+     * @return 合并后的段
+     */
+    static JsonObject mergeSection(JsonObject oldSection, JsonElement newTree, String... fields) {
+        JsonObject next = newTree != null && newTree.isJsonObject()
+                ? newTree.getAsJsonObject().deepCopy()
+                : new JsonObject();
+        if (oldSection == null) {
+            return next;
+        }
+        for (String field : fields) {
+            String incoming = next.has(field) && !next.get(field).isJsonNull()
+                    ? next.get(field).getAsString()
+                    : "";
+            if (!incoming.isBlank()) {
+                continue;
+            }
+            if (oldSection.has(field) && !oldSection.get(field).isJsonNull()
+                    && !oldSection.get(field).getAsString().isBlank()) {
+                next.add(field, oldSection.get(field));
+            }
+        }
+        return next;
+    }
+
+    private static JsonObject section(JsonObject root, String name) {
+        if (root == null || !root.has(name) || !root.get(name).isJsonObject()) {
+            return null;
+        }
+        return root.getAsJsonObject(name);
     }
 
     /** 用 UI 当前值更新内存中的 baidu/youdao 段（不写盘） */
