@@ -1,0 +1,144 @@
+# DeepSeek API 接入与模型列表使用指南
+
+## 1. 接入准备
+
+在开始调用之前，你需要先申请一个 API Key。DeepSeek API 使用与 OpenAI 兼容的格式，通过修改配置，你可以直接使用 OpenAI SDK 或任何兼容 OpenAI API 的软件来访问。
+
+### 核心配置参数
+
+| 参数 | 值 |
+|---|---|
+| **Base URL（OpenAI 格式）** | `https://api.deepseek.com` |
+| **Base URL（Anthropic 格式）** | `https://api.deepseek.com/anthropic` |
+| **API Key** | 在 DeepSeek 平台申请 |
+
+> 注意：`base_url` 也可以设置为 `https://api.deepseek.com/v1` 以兼容某些软件，但 API 的版本与模型版本无关。
+
+
+## 2. 调用对话 API
+
+以下为非流式输出的样例，将 `stream` 设为 `true` 即可启用流式输出。
+
+### Python（使用 OpenAI SDK）
+
+```python
+# 安装：pip3 install openai
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ.get('DEEPSEEK_API_KEY'),
+    base_url="https://api.deepseek.com"
+)
+
+response = client.chat.completions.create(
+    model="deepseek-flash",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hello!"}
+    ],
+    stream=False,
+    reasoning_effort="high",
+    extra_body={"thinking": {"type": "enabled"}}
+)
+
+print(response.choices[0].message.content)
+```
+
+### Node.js
+
+```javascript
+// 安装：npm install openai
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+    baseURL: 'https://api.deepseek.com',
+    apiKey: process.env.DEEPSEEK_API_KEY,
+});
+
+async function main() {
+    const completion = await openai.chat.completions.create({
+        messages: [{ role: "system", content: "You are a helpful assistant." }],
+        model: "deepseek-flash",
+        thinking: { type: "enabled" },
+        reasoning_effort: "high",
+        stream: false
+    });
+    console.log(completion.choices[0].message.content);
+}
+
+main();
+```
+
+### cURL
+
+```bash
+curl https://api.deepseek.com/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${DEEPSEEK_API_KEY}" \
+  -d '{
+        "model": "deepseek-flash",
+        "messages": [
+          {"role": "system", "content": "You are a helpful assistant."},
+          {"role": "user", "content": "Hello!"}
+        ],
+        "thinking": {"type": "enabled"},
+        "reasoning_effort": "high",
+        "stream": false
+      }'
+```
+
+
+## 3. 获取模型列表
+
+使用 `GET /models` 接口可以列出当前可用的模型及其基本信息。
+
+**请求示例：**
+
+```bash
+curl -L -X GET 'https://api.deepseek.com/models' \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer ${DEEPSEEK_API_KEY}'
+```
+
+**返回结果：**
+
+返回一个包含 `object`（值为 `list`）和 `data` 数组的 JSON 对象，`data` 中每个元素包含模型的 `id`、`object`（值为 `model`）和 `owned_by` 等字段。
+
+
+## 4. 当前可用模型
+
+根据官方文档，当前支持的模型如下：
+
+| 模型名称 | 模型版本 | 上下文长度 | 核心特性 |
+|---|---|---|---|
+| **deepseek-flash** | DeepSeek-V4.1-Flash | 1M | 支持图像理解、思考模式、JSON 输出、Tool Calls |
+| **deepseek-v4-pro** | DeepSeek-V4-Pro-0813 | 1M | 思考模式、JSON 输出、Tool Calls，不支持图像理解 |
+
+### 关于模型名称的说明
+
+- 请使用 `deepseek-flash` 作为模型名。旧名称 `deepseek-v4-flash` 和 `deepseek-v4-flash-vision-exp` 仍可调用，但对应模型已下线，请求将由 DeepSeek-V4.1-Flash 提供服务，并按 Flash 价格计费。
+- **deepseek-v4-pro** 的 API 调用服务将持续提供（2026 年 9 月 14 日之后），计费方式保持不变。
+
+### 定价概览
+
+以下为部分价格参考（单位：每百万 tokens）：
+
+| 模型 | 缓存命中（输入） | 缓存未命中（输入） | 输出 |
+|---|---|---|---|
+| **deepseek-flash** | 空闲 $0.003 / 高峰 $0.006 | 空闲 $0.15 / 高峰 $0.3 | 空闲 $0.6 / 高峰 $1.2 |
+| **deepseek-v4-pro** | 空闲 $0.022 / 高峰 $0.044 | 空闲 $0.66 / 高峰 $1.32 | 空闲 $1.98 / 高峰 $3.96 |
+
+> 空闲时段价格为高峰时段价格的一半。高峰时段为北京时间周一至周五（不含法定节假日）的 9:00-12:00 和 14:00-18:00。
+
+
+## 5. 其他能力
+
+DeepSeek API 还提供以下支持：
+
+- **Anthropic API 格式**：可通过 `https://api.deepseek.com/anthropic` 访问。
+- **Responses API**：支持 Codex 等工具接入，`base_url` 为 `https://api.deepseek.com`。
+- **Agent 工具集成**：可直接在 Claude Code、GitHub Copilot、OpenCode 等工具中将 DeepSeek 作为后端模型使用，无需编写代码。
+- **思考模式**：支持切换非思考与思考模式（默认开启）。
+
+如需了解完整的 API 参数、流式输出细节或 JSON Output 等高级功能，建议查阅官方 API 文档。
