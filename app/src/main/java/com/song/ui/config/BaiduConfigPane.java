@@ -106,15 +106,12 @@ public class BaiduConfigPane extends GridPane {
     }
 
     /**
-     * 仅写入密钥相关字段并切换到百度厂商。
+     * 仅写入密钥相关字段（失焦即生效）。
+     * 不切换当前生效的提供商，避免"只是填个密钥"就把正在用的翻译服务换掉。
      *
      * @param config 应用配置
      */
     public void saveSecretsOnly(AppConfig config) {
-        config.setVendor(ProviderVendor.BAIDU);
-        if (serviceBox.getValue() != null) {
-            config.setProvider(serviceBox.getValue());
-        }
         BaiduConfig b = config.getBaiduConfig();
         b.setApiKey(apiKeyField.getPlain());
         b.setSecretKey(secretKeyField.getPlain());

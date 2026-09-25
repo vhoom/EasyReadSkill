@@ -1,6 +1,8 @@
 package com.song.service;
 
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 翻译 API 错误码对应的文档说明。
@@ -60,5 +62,30 @@ public final class TranslationErrorMessages {
 
     public static String youdao(String code) {
         return YOUDAO.getOrDefault(code, "有道翻译错误，错误码：" + code);
+    }
+
+    private static final Pattern BAIDU_CODE = Pattern.compile("百度错误\\s*(\\d+)");
+    private static final Pattern YOUDAO_CODE =
+            Pattern.compile("有道(?:大模型)?错误(?:码)?[:：]\\s*(\\d+)");
+
+    /**
+     * 给厂商原始错误串补上文档里的中文说明。
+     *
+     * @param raw 原始错误信息，可为 null
+     * @return 带说明的信息；识别不出错误码时原样返回
+     */
+    public static String explain(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return raw;
+        }
+        Matcher baidu = BAIDU_CODE.matcher(raw);
+        if (baidu.find()) {
+            return raw + " —— " + baidu(baidu.group(1));
+        }
+        Matcher youdao = YOUDAO_CODE.matcher(raw);
+        if (youdao.find()) {
+            return raw + " —— " + youdao(youdao.group(1));
+        }
+        return raw;
     }
 }

@@ -3,6 +3,7 @@ package com.song.ui;
 import com.song.model.FilterType;
 import com.song.model.SkillFile;
 import com.song.model.TranslateStatus;
+import com.song.service.FileScanner;
 import com.song.skin.SkinManager;
 import com.song.skin.SkinTokens;
 import com.song.util.UiHelper;
@@ -40,12 +41,17 @@ public class LeftPanel extends VBox {
         Label title = new Label("skills");
         title.getStyleClass().add("section-title");
 
+        Label selectedLabel = new Label("已勾选 0");
+        selectedLabel.getStyleClass().add("secondary");
+        state.selectedCountProperty().addListener((obs, o, n) ->
+                selectedLabel.setText("已勾选 " + n.intValue()));
+
         Button selectAllBtn = new Button("全选");
         Button invertBtn = new Button("反选");
         Button clearBtn = new Button("取消");
         Region headerSpacer = new Region();
         HBox.setHgrow(headerSpacer, Priority.ALWAYS);
-        HBox header = new HBox(8, title, headerSpacer, selectAllBtn, invertBtn, clearBtn);
+        HBox header = new HBox(8, title, selectedLabel, headerSpacer, selectAllBtn, invertBtn, clearBtn);
         header.setAlignment(Pos.CENTER_LEFT);
         header.setPadding(new Insets(12, 16, 4, 16));
 
@@ -55,14 +61,17 @@ public class LeftPanel extends VBox {
 
         selectAllBtn.setOnAction(e -> {
             for (SkillFile sf : new ArrayList<>(filtered)) sf.setSelected(true);
+            state.refreshSelectedCount();
             listView.refresh();
         });
         invertBtn.setOnAction(e -> {
             for (SkillFile sf : new ArrayList<>(filtered)) sf.setSelected(!sf.isSelected());
+            state.refreshSelectedCount();
             listView.refresh();
         });
         clearBtn.setOnAction(e -> {
             for (SkillFile sf : new ArrayList<>(filtered)) sf.setSelected(false);
+            state.refreshSelectedCount();
             listView.refresh();
         });
 
@@ -172,6 +181,8 @@ public class LeftPanel extends VBox {
     private class SkillCell extends ListCell<SkillFile> {
         private final CheckBox cb = new CheckBox();
         private final Label nameLabel = new Label();
+        /** 非外部 skill 的提醒标记。 */
+        private final Label badge = new Label("非外部skill");
         private final Label pathLabel = new Label();
         private final VBox box = new VBox(2);
         private Tooltip tooltip;
@@ -180,9 +191,12 @@ public class LeftPanel extends VBox {
 
         SkillCell() {
             nameLabel.getStyleClass().add("item-name");
+            badge.getStyleClass().add("tag-warn");
+            badge.setVisible(false);
+            badge.setManaged(false);
             pathLabel.getStyleClass().add("secondary");
 
-            HBox line = new HBox(8, cb, nameLabel);
+            HBox line = new HBox(8, cb, nameLabel, badge);
             line.setAlignment(Pos.CENTER_LEFT);
 
             box.getChildren().addAll(line, pathLabel);
@@ -191,6 +205,7 @@ public class LeftPanel extends VBox {
             cb.selectedProperty().addListener((obs, o, n) -> {
                 if (updating) return;
                 if (bound != null) bound.setSelected(n);
+                state.refreshSelectedCount();
             });
         }
 
@@ -212,6 +227,11 @@ public class LeftPanel extends VBox {
 
             String path = displayPaths.get(sf.getFilePath());
             pathLabel.setText(path != null ? path : sf.getFilePath());
+
+            // 不按 skills 规则匹配到的，在列表上提醒（仍然照常列出、照常选择）
+            boolean external = sf.isExternal();
+            badge.setVisible(!external);
+            badge.setManaged(!external);
 
             // 悬浮显示完整路径
             if (tooltip == null) {

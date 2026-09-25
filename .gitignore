@@ -10,8 +10,15 @@ target/
 .idea/compiler.xml
 .idea/libraries/
 *.iws
+*.txt
+mvnw
+mvnw.cmd
 *.iml
 *.ipr
+misc.xml
+d.bat
+vcs.xml
+DESIGN.md
 out/**
 target/**
 test/**
@@ -41,3 +48,5 @@ build/
 .DS_Store
 *.cvs
 *.py
+/.idea/artifacts/easyReadSkill_jar.xml
+/.idea/.gitignore

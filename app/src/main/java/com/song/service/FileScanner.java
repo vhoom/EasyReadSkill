@@ -6,6 +6,7 @@ import com.song.model.SkillFile;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -19,6 +20,12 @@ import java.util.Set;
 public class FileScanner {
 
     public static final String SKILL_FILENAME = "SKILL.md";
+
+    /** 视为"正常"的目录层级：<扫描根>/<一级>/<二级>/SKILL.md */
+    private static final int SECOND_LEVEL_DEPTH = 2;
+
+    /** 约定的 skills 目录名（大小写不敏感），必须是扫描根下的第一级目录。 */
+    private static final String SKILLS_DIR = "skills";
 
     private static final Set<String> IGNORED_DIRS = Set.of(
             ".git", ".svn", ".hg", ".idea", "node_modules",
@@ -36,11 +43,92 @@ public class FileScanner {
             if (!dir.isDirectory()) continue;
             for (String abs : collectSkillPaths(dir, visitedDirs)) {
                 if (seen.add(canonicalKey(abs))) {
-                    result.add(new SkillFile(abs, new File(abs).getParentFile().getName()));
+                    SkillFile sf = new SkillFile(abs, new File(abs).getParentFile().getName());
+                    sf.setExternal(isExternalSkill(dir, new File(abs)));
+                    result.add(sf);
                 }
             }
         }
         return result;
+    }
+
+    /**
+     * 是否算"外部 skill"（列表正常显示）：
+     *
+     * <p>只按相对扫描根的路径判断，满足其一即可：</p>
+     * <ol>
+     *   <li><b>扫描根下第一级就是 {@code skills} 目录</b>（大小写不敏感），
+     *       SKILL.md 在该目录之下，例如 {@code <根>/skills/<技能名>/SKILL.md}、
+     *       {@code <根>/skills/<分类>/<技能名>/SKILL.md}；</li>
+     *   <li>或 SKILL.md 正好在扫描根下二级目录里：{@code <根>/<一级>/<二级>/SKILL.md}。</li>
+     * </ol>
+     *
+     * <p>其它情况算非外部，例如插件缓存里的
+     * {@code <根>/plugins/cache/<插件>/<版本>/skills/<技能名>/SKILL.md}
+     * （skills 不是第一级）、{@code <根>/某目录/SKILL.md}（只有一级）、
+     * {@code <根>/某目录/a/b/SKILL.md}（三级以上）。</p>
+     *
+     * 其它情况仍然会扫描出来并列出，只是界面上标"非外部skill"。
+     *
+     * @param scanRoot  扫描根目录
+     * @param skillFile SKILL.md
+     * @return 是否按规则匹配
+     */
+    public static boolean isExternalSkill(File scanRoot, File skillFile) {
+        if (scanRoot == null || skillFile == null) return false;
+        List<String> segments = relativeSegments(scanRoot, skillFile);
+        if (segments == null || segments.size() < 2) return false;
+        List<String> dirs = segments.subList(0, segments.size() - 1);
+        if (SKILLS_DIR.equalsIgnoreCase(dirs.get(0))) {
+            return true;
+        }
+        return dirs.size() == SECOND_LEVEL_DEPTH;
+    }
+
+    /**
+     * 在所有已配置扫描路径里判断（不区分是否启用）：任一扫描根匹配即算外部 skill。
+     * 文件不在任何已配置扫描路径下时返回 true（无从判断，不打扰用户）。
+     *
+     * @param scanPaths      扫描路径配置
+     * @param skillFilePath  SKILL.md 路径
+     * @return 是否按规则匹配
+     */
+    public static boolean isExternalSkill(List<ScanPath> scanPaths, String skillFilePath) {
+        if (skillFilePath == null) return true;
+        if (scanPaths == null || scanPaths.isEmpty()) return true;
+        File file = new File(skillFilePath);
+        boolean underAnyRoot = false;
+        for (ScanPath sp : scanPaths) {
+            if (sp == null || sp.getPath() == null) continue;
+            File root = new File(sp.getPath());
+            if (relativeSegments(root, file) == null) continue;
+            underAnyRoot = true;
+            if (isExternalSkill(root, file)) return true;
+        }
+        return !underAnyRoot;
+    }
+
+
+
+    /**
+     * @param root 根目录
+     * @param file 文件
+     * @return 相对路径的各段；不在根目录下返回 null
+     */
+    static List<String> relativeSegments(File root, File file) {
+        try {
+            Path r = root.toPath().toAbsolutePath().normalize();
+            Path f = file.toPath().toAbsolutePath().normalize();
+            if (!f.startsWith(r)) return null;
+            List<String> out = new ArrayList<>();
+            for (Path part : r.relativize(f)) {
+                out.add(part.toString());
+            }
+            return out;
+        } catch (RuntimeException e) {
+            // 不同盘符等情况
+            return null;
+        }
     }
 
     /**
